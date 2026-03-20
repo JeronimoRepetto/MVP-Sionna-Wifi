@@ -1,0 +1,10 @@
+# Core
+numpy>=1.24
+fastapi>=0.100
+uvicorn[standard]>=0.22
+websockets>=11.0
+
+# Sionna & TensorFlow (uncomment when GPU is configured)
+# sionna>=1.0
+# tensorflow>=2.12
+# mitsuba>=3.0

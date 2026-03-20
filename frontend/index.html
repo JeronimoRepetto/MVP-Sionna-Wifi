@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="WiFi Propagation Simulation - Sionna RT Ray Tracing Visualization">
+    <title>MVP-Sionna-WiFi | RF Propagation Simulator</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header id="header">
+            <div class="header-left">
+                <div class="logo">
+                    <span class="logo-icon">📡</span>
+                    <h1>Sionna<span class="accent">WiFi</span></h1>
+                </div>
+                <span class="version">v0.1 MVP</span>
+            </div>
+            <div class="header-center">
+                <div id="connection-status" class="status-badge disconnected">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Disconnected</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div id="sim-time" class="metric">
+                    <span class="metric-label">Sim Time</span>
+                    <span class="metric-value">--</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main id="main">
+            <!-- 3D Viewport -->
+            <div id="viewport-container">
+                <canvas id="three-canvas"></canvas>
+                <div id="viewport-overlay">
+                    <div id="fps-counter">-- FPS</div>
+                </div>
+            </div>
+
+            <!-- Side Panel -->
+            <aside id="side-panel">
+                <!-- Simulation Controls -->
+                <section class="panel-section">
+                    <h2 class="section-title">
+                        <span class="section-icon">⚡</span>
+                        Simulation
+                    </h2>
+                    <button id="btn-simulate" class="btn-primary">
+                        <span class="btn-icon">▶</span>
+                        Run Simulation
+                    </button>
+                    <div id="progress-bar" class="progress-container hidden">
+                        <div class="progress-fill"></div>
+                        <span class="progress-text">0%</span>
+                    </div>
+                    <div id="progress-message" class="progress-msg hidden"></div>
+                </section>
+
+                <!-- Ray Tracing Parameters -->
+                <section class="panel-section">
+                    <h2 class="section-title">
+                        <span class="section-icon">🔧</span>
+                        Parameters
+                    </h2>
+                    <div class="param-group">
+                        <label for="param-depth">Max Reflections</label>
+                        <div class="slider-row">
+                            <input type="range" id="param-depth" min="1" max="10" value="6" step="1">
+                            <span id="param-depth-val" class="slider-val">6</span>
+                        </div>
+                    </div>
+                    <div class="param-group">
+                        <label for="param-samples">Ray Density</label>
+                        <div class="slider-row">
+                            <input type="range" id="param-samples" min="100000" max="2000000" value="1000000" step="100000">
+                            <span id="param-samples-val" class="slider-val">1M</span>
+                        </div>
+                    </div>
+                    <div class="param-group toggle-group">
+                        <label for="param-diffraction">Diffraction</label>
+                        <label class="toggle">
+                            <input type="checkbox" id="param-diffraction" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </section>
+
+                <!-- Visualization Controls -->
+                <section class="panel-section">
+                    <h2 class="section-title">
+                        <span class="section-icon">👁️</span>
+                        Display
+                    </h2>
+                    <div class="param-group toggle-group">
+                        <label>Show Rays</label>
+                        <label class="toggle">
+                            <input type="checkbox" id="toggle-rays" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="param-group toggle-group">
+                        <label>Show Heatmap</label>
+                        <label class="toggle">
+                            <input type="checkbox" id="toggle-heatmap">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="param-group toggle-group">
+                        <label>Show Labels</label>
+                        <label class="toggle">
+                            <input type="checkbox" id="toggle-labels" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="param-group" id="heatmap-height-group" style="display:none">
+                        <label for="heatmap-height">Heatmap Height (m)</label>
+                        <div class="slider-row">
+                            <input type="range" id="heatmap-height" min="0.1" max="1.9" value="1.0" step="0.1">
+                            <span id="heatmap-height-val" class="slider-val">1.0</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Receiver Selector -->
+                <section class="panel-section">
+                    <h2 class="section-title">
+                        <span class="section-icon">📶</span>
+                        Receivers
+                    </h2>
+                    <div id="receiver-list" class="receiver-grid">
+                        <!-- Populated dynamically -->
+                    </div>
+                </section>
+
+                <!-- Signal Info -->
+                <section class="panel-section" id="signal-info" style="display:none">
+                    <h2 class="section-title">
+                        <span class="section-icon">📊</span>
+                        Signal Info
+                    </h2>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">Power</span>
+                            <span id="info-power" class="info-value mono">--</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Delay Spread</span>
+                            <span id="info-delay" class="info-value mono">--</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Paths</span>
+                            <span id="info-paths" class="info-value mono">--</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Distance</span>
+                            <span id="info-distance" class="info-value mono">--</span>
+                        </div>
+                    </div>
+                </section>
+            </aside>
+        </main>
+    </div>
+
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>

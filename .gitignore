@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+venv/
+.venv/
+env/
+
+# Sionna / TensorFlow
+*.h5
+*.ckpt
+*.pb
+logs/
+checkpoints/
+
+# Blender
+*.blend1
+*.blend2
+
+# Node
+node_modules/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Env
+.env
+.env.local
+
+# Internal documentation (private, not pushed)
+internDocs/
+
+# Generated data
+scenes/*.xml
+!scenes/.gitkeep
+output/
