@@ -102,10 +102,12 @@ def _add_transmitter(scene):
 def _add_receivers(scene):
     """Add all 8 ESP32-S3 receivers with isotropic antennas."""
     # Create shared antenna
-    if ANTENNA_PATTERN == "iso":
-        antenna = rt.Antenna("iso", "V")
+    if ANTENNA_PATTERN == "dipole":
+        # PlanarArray(num_rows, num_cols, row_spacing, col_spacing, pattern, polarization)
+        # Emulando antena omnidireccional con patrón dipolo vertical
+        antenna = rt.PlanarArray(1, 1, 0.5, 0.5, pattern="dipole", polarization="V")
     else:
-        antenna = rt.Antenna("iso", "V")
+        antenna = rt.IsotropicAntenna(polarization="V")
     
     rx_array = rt.AntennaArray(antenna, positions=[[0, 0, 0]])
     

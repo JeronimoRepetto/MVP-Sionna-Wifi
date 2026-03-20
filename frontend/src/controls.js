@@ -7,11 +7,15 @@ import { requestSimulation, isConnected } from './websocket.js';
 import { filterRaysByReceiver, setRaysVisible } from './rays.js';
 import { setHeatmapVisible, setHeatmapHeight } from './heatmap.js';
 import { setActiveReceiver } from './sensors.js';
+import { initCSIPanel, openCSI, closeCSI } from './csi_panel.js';
+
+let lastSimResult = null;
 
 let selectedReceiver = 'all';
 let onSimulateCallback = null;
 
 export function initControls(onSimulate) {
+    initCSIPanel();
     onSimulateCallback = onSimulate;
     
     setupSimulationButton();
@@ -166,14 +170,37 @@ function selectReceiver(name, container) {
     
     if (name === 'all') {
         container.querySelector('.all-active').classList.add('active');
+        closeCSI(); // Close CSI panel when "All" is selected
     } else {
         const card = container.querySelector(`[data-name="${name}"]`);
-        if (card) card.classList.add('active');
+        if (card) {
+            card.classList.add('active');
+            // Select and show CSI Spectrogram Panel
+            setActiveReceiver(name);
+            filterRaysByReceiver(name);
+            
+            // Extract CSI and RSSI
+            let csiData = null;
+            let rssi = -90; // Default RSSI if not found
+            if (lastSimResult) {
+                if (lastSimResult.csi && lastSimResult.csi[name]) {
+                    csiData = lastSimResult.csi[name];
+                }
+                
+                // Calculamos RSSI desde los paths
+                if (lastSimResult.paths && lastSimResult.paths[name]) {
+                    let totalPowerLin = 0;
+                    lastSimResult.paths[name].forEach(p => totalPowerLin += p.power_lin);
+                    if (totalPowerLin > 0) {
+                        rssi = 10 * Math.log10(totalPowerLin);
+                    }
+                }
+            }
+            
+            // Si no hay datos (aún no se simuló), pasamos null y se pondrá en waiting o ruido por defecto
+            openCSI(name, csiData, rssi);
+        }
     }
-    
-    // Update 3D view
-    filterRaysByReceiver(name);
-    setActiveReceiver(name);
     
     // Update signal info
     updateSignalInfo(name);
@@ -211,8 +238,6 @@ export function updateConnectionStatus(status) {
     badge.className = `status-badge ${status}`;
     text.textContent = status === 'connected' ? 'Connected' : 'Disconnected';
 }
-
-let lastSimResult = null;
 
 export function setSimulationResult(result) {
     lastSimResult = result;

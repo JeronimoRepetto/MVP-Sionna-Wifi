@@ -24,8 +24,9 @@ from config import (
 )
 
 
-def run_simulation(scene, max_depth=None, num_samples=None, 
-                   diffraction=None, scattering=None):
+def run_simulation(scene, max_depth=6, num_samples=20000, 
+                   diffraction=True, scattering=False,
+                   refraction=True, specular_reflection=True):
     """
     Run the full ray tracing simulation.
     
@@ -35,6 +36,8 @@ def run_simulation(scene, max_depth=None, num_samples=None,
         num_samples: Override ray count
         diffraction: Override diffraction toggle
         scattering: Override scattering toggle
+        refraction: Override refraction toggle
+        specular_reflection: Override specular reflection toggle
         
     Returns:
         dict with paths, CIR, CSI, and coverage data serialized for frontend
@@ -47,12 +50,13 @@ def run_simulation(scene, max_depth=None, num_samples=None,
     if not HAS_SIONNA or (isinstance(scene, dict) and scene.get("type") == "mock"):
         return _mock_simulation(max_depth, num_samples)
     
-    return _run_sionna_simulation(
-        scene, max_depth, num_samples, diffraction, scattering
-    )
+    return _run_sionna_simulation(scene, max_depth, num_samples, 
+                                      diffraction, scattering, 
+                                      refraction, specular_reflection)
 
 
-def _run_sionna_simulation(scene, max_depth, num_samples, diffraction, scattering):
+def _run_sionna_simulation(scene, max_depth, num_samples, diffraction, scattering,
+                           refraction, specular_reflection):
     """Run actual Sionna RT ray tracing."""
     print(f"\n{'='*60}")
     print(f"Running Sionna RT Simulation")

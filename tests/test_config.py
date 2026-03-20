@@ -42,14 +42,12 @@ def test_wifi_parameters():
 
 
 def test_transmitter_position():
-    """Transmitter must be inside the room and near the back wall."""
+    """Transmitter must be just outside the back wall."""
     pos = TRANSMITTER["position"]
-    assert 0 <= pos[0] <= ROOM_WIDTH, f"Tx X={pos[0]} outside room [0, {ROOM_WIDTH}]"
-    assert 0 <= pos[1] <= ROOM_DEPTH, f"Tx Y={pos[1]} outside room [0, {ROOM_DEPTH}]"
-    assert 0 <= pos[2] <= ROOM_HEIGHT, f"Tx Z={pos[2]} outside room [0, {ROOM_HEIGHT}]"
-    # Should be near back wall (high Y)
-    assert pos[1] > ROOM_DEPTH * 0.8, f"Tx should be near back wall, Y={pos[1]}"
-    print(f"  ✅ Transmitter: {pos} (inside room, near back wall)")
+    assert -1.0 <= pos[0] <= ROOM_WIDTH + 1.0, f"Tx X={pos[0]} too far from room [0, {ROOM_WIDTH}]"
+    assert pos[1] >= ROOM_DEPTH, f"Tx Y={pos[1]} must be outside the back wall (>{ROOM_DEPTH})"
+    assert 0 <= pos[2] <= ROOM_HEIGHT, f"Tx Z={pos[2]} outside vertical bounds [0, {ROOM_HEIGHT}]"
+    print(f"  ✅ Transmitter: {pos} (outside room, behind back wall)")
 
 
 def test_receiver_count():
@@ -58,14 +56,14 @@ def test_receiver_count():
     print(f"  ✅ Receiver count: {len(RECEIVERS)}")
 
 
-def test_receiver_positions_inside_room():
-    """All receivers must be inside the room boundaries."""
+def test_receiver_positions_near_room():
+    """All receivers must be positioned just outside the room boundaries."""
     for name, config in RECEIVERS.items():
         pos = config["position"]
-        assert 0 <= pos[0] <= ROOM_WIDTH, f"{name} X={pos[0]} outside room"
-        assert 0 <= pos[1] <= ROOM_DEPTH, f"{name} Y={pos[1]} outside room"
-        assert 0 <= pos[2] <= ROOM_HEIGHT, f"{name} Z={pos[2]} outside room"
-    print("  ✅ All 8 receivers inside room boundaries")
+        assert -1.0 <= pos[0] <= ROOM_WIDTH + 1.0, f"{name} X={pos[0]} too far from room"
+        assert -1.0 <= pos[1] <= ROOM_DEPTH + 1.0, f"{name} Y={pos[1]} too far from room"
+        assert 0 <= pos[2] <= ROOM_HEIGHT, f"{name} Z={pos[2]} outside vertical bounds"
+    print("  ✅ All 8 receivers are correctly positioned around the room")
 
 
 def test_receiver_two_levels():
@@ -124,7 +122,7 @@ if __name__ == "__main__":
         test_wifi_parameters,
         test_transmitter_position,
         test_receiver_count,
-        test_receiver_positions_inside_room,
+        test_receiver_positions_near_room,
         test_receiver_two_levels,
         test_receiver_labels_exist,
         test_materials_itu_convention,

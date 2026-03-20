@@ -9,6 +9,7 @@ import * as THREE from 'three';
 let roomWidth = 2.0;
 let roomDepth = 3.5;
 let roomHeight = 2.0;
+let wallThickness = 0.12;
 
 const WALL_OPACITY = 0.15;
 const WALL_COLOR = 0x4a6fa5;
@@ -23,6 +24,7 @@ export function createRoom(scene, config = null) {
         roomWidth = config.width || 2.0;
         roomDepth = config.depth || 3.5;
         roomHeight = config.height || 2.0;
+        wallThickness = config.wall_thickness || 0.12;
     }
     
     // Remove existing room
@@ -71,30 +73,34 @@ export function createRoom(scene, config = null) {
         roughness: 1.0,
     });
     
-    // Create walls
+    // Create volumetric walls
+    const t = wallThickness;
     const walls = [
-        // Front wall (Y=0)
-        { w: roomWidth, h: roomHeight, pos: [hw, 0, hh], rot: [-Math.PI / 2, 0, 0] },
-        // Back wall (Y=depth)
-        { w: roomWidth, h: roomHeight, pos: [hw, roomDepth, hh], rot: [-Math.PI / 2, 0, 0] },
-        // Left wall (X=0)
-        { w: roomDepth, h: roomHeight, pos: [0, hd, hh], rot: [-Math.PI / 2, 0, Math.PI / 2] },
-        // Right wall (X=width)
-        { w: roomDepth, h: roomHeight, pos: [roomWidth, hd, hh], rot: [-Math.PI / 2, 0, Math.PI / 2] },
+        // Front wall (Y=0, thick across Y). Extend X by 2*t to cover corners
+        { w: roomWidth + 2*t, h: roomHeight, d: t, pos: [hw, -t/2, hh] },
+        // Back wall (Y=depth, thick across Y). Extend X by 2*t to cover corners
+        { w: roomWidth + 2*t, h: roomHeight, d: t, pos: [hw, roomDepth + t/2, hh] },
+        // Left wall (X=0, thick across X). Length exactly roomDepth
+        { w: t, h: roomHeight, d: roomDepth, pos: [-t/2, hd, hh] },
+        // Right wall (X=width, thick across X). Length exactly roomDepth
+        { w: t, h: roomHeight, d: roomDepth, pos: [roomWidth + t/2, hd, hh] },
     ];
     
-    walls.forEach(({ w, h, pos, rot }) => {
-        const geo = new THREE.PlaneGeometry(w, h);
-        const mesh = new THREE.Mesh(geo, wallMat.clone());
-        mesh.position.set(...pos);
-        mesh.rotation.set(...rot);
+    walls.forEach(({ w, h, d, pos }) => {
+        // En ThreeJS: BoxGeometry(width, height, depth) -> (X, Y, Z)
+        // Pero nuestro mundo es (X, Y, Z) -> (width, depth, height)
+        // Así que pasamos: w, d, h. No necesitamos rotar.
+        const tGeo = new THREE.BoxGeometry(w, d, h);
+        const mesh = new THREE.Mesh(tGeo, wallMat.clone());
+        mesh.position.set(pos[0], pos[1], pos[2]);
+        mesh.rotation.set(0, 0, 0); 
         roomGroup.add(mesh);
         
         // Add edges
-        const edges = new THREE.EdgesGeometry(geo);
+        const edges = new THREE.EdgesGeometry(tGeo);
         const line = new THREE.LineSegments(edges, edgeMat.clone());
-        line.position.set(...pos);
-        line.rotation.set(...rot);
+        line.position.copy(mesh.position);
+        line.rotation.copy(mesh.rotation);
         roomGroup.add(line);
     });
     

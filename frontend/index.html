@@ -166,8 +166,31 @@
                 </section>
             </aside>
         </main>
+        
+        <!-- CSI Spectrogram Panel (Hidden by default) -->
+        <div id="csi-panel" class="csi-panel hidden">
+            <div class="csi-header">
+                <h3>CSI Monitor: <span id="csi-rx-name">None</span></h3>
+                <button id="close-csi-btn" class="icon-btn">✕</button>
+            </div>
+            <div class="csi-charts">
+                <div class="chart-row">
+                    <canvas id="chart-amp"></canvas>
+                </div>
+                <div class="chart-row">
+                    <canvas id="chart-phase"></canvas>
+                </div>
+                <div class="chart-row spectrogram-row">
+                    <canvas id="chart-spectro"></canvas>
+                </div>
+                <div class="chart-row">
+                    <canvas id="chart-rssi"></canvas>
+                </div>
+            </div>
+            <div id="csi-status" class="csi-status-text">Waiting for data...</div>
+        </div>
     </div>
-
+    
     <script type="module" src="src/main.js"></script>
 </body>
 </html>
