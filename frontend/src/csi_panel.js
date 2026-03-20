@@ -22,7 +22,7 @@ const rssiHistory = [];
 const frameCount = { value: 0 };
 
 // Canvas Contexts
-let ctxAmp, ctxPhase, ctxSpectro, ctxRssi;
+var ctxAmp, ctxPhase, ctxSpectro, ctxRssi;
 
 const jetColormap = (t) => {
     t = Math.max(0, Math.min(1, t));
@@ -77,17 +77,17 @@ export function closeCSI() {
 
 export function updateBaseData(csiData, rssiData) {
     baseRSSI = rssiData;
-    // Extract 114 subcarriers from the flat array [amp1, phase1, amp2, phase2...]
-    // If not matching, pad or truncate
-    const subcount = Math.min(MAX_SUBCARRIERS, csiData.length / 2);
+    if (!csiData || !csiData.amplitude_db || !csiData.phase_rad) return;
+    
+    const subcount = Math.min(MAX_SUBCARRIERS, csiData.amplitude_db.length);
     for (let i = 0; i < subcount; i++) {
-        let db = csiData[2*i]; 
+        let db = csiData.amplitude_db[i]; 
         // Normalize dB from [-100, -30] to [0.0, 1.0] approx
         let normAmp = (db + 100) / 70;
         normAmp = Math.max(0.01, Math.min(1.0, normAmp));
         
         baseCSI_Amp[i] = normAmp * 100; // Map to 0-100 scale for drawing
-        baseCSI_Phase[i] = csiData[2*i + 1];
+        baseCSI_Phase[i] = csiData.phase_rad[i];
     }
 }
 

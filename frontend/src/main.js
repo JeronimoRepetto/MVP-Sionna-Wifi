@@ -8,10 +8,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 import { createRoom, getRoomDimensions } from './scene3d.js';
 import { createSensors, updateSensorAnimations, setActiveReceiver } from './sensors.js';
-import { createRays, updateRayAnimations, clearRays } from './rays.js';
+import { createRays, updateRayAnimations, clearRays, setRaysVisible } from './rays.js';
 import { createHeatmap, setHeatmapVisible } from './heatmap.js';
 import { initControls, populateReceiverList, updateConnectionStatus, 
-         showProgress, resetSimulateButton, setSimulationResult, runNextLiveSimulation } from './controls.js';
+         showProgress, resetSimulateButton, setSimulationResult, runNextLiveSimulation, setControlsSceneInfo } from './controls.js';
 import { initWebSocket, sendMessage } from './websocket.js';
 
 // =============================================================================
@@ -57,7 +57,7 @@ controls.update();
 // State
 // =============================================================================
 
-let sceneInfo = null;
+export let globalSceneInfo = null;
 let roomOffset = { x: 0, y: 0 };
 let lastFrameTime = performance.now();
 let frameCount = 0;
@@ -123,7 +123,8 @@ function getDefaultSceneInfo() {
 // =============================================================================
 
 function setupScene(info) {
-    sceneInfo = info;
+    globalSceneInfo = info;
+    setControlsSceneInfo(info);
     
     // Calculate offset to center room at origin
     roomOffset = {
@@ -206,11 +207,12 @@ function onSimulationComplete(data) {
     // Render ray paths
     if (result.paths) {
         createRays(scene, result.paths, roomOffset);
+        setRaysVisible(document.getElementById('toggle-rays').checked);
     }
     
-    // Render coverage heatmap (hidden by default, toggle to show)
+    // Render coverage heatmap
     if (result.coverage) {
-        createHeatmap(scene, result.coverage, sceneInfo.room, roomOffset);
+        createHeatmap(scene, result.coverage, globalSceneInfo.room, roomOffset);
         setHeatmapVisible(document.getElementById('toggle-heatmap').checked);
     }
     

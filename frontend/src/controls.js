@@ -10,6 +10,11 @@ import { setActiveReceiver } from './sensors.js';
 import { initCSIPanel, openCSI, closeCSI } from './csi_panel.js';
 
 let lastSimResult = null;
+let currentSceneInfo = null;
+
+export function setControlsSceneInfo(info) {
+    currentSceneInfo = info;
+}
 
 let selectedReceiver = 'all';
 let onSimulateCallback = null;
@@ -137,17 +142,12 @@ function setupDisplayToggles() {
         heatmapHeightGroup.style.display = e.target.checked ? 'block' : 'none';
     });
     
-    // Heatmap height
+    // Heatmap opacity
     const heatmapSlider = document.getElementById('heatmap-height');
     const heatmapVal = document.getElementById('heatmap-height-val');
     heatmapSlider.addEventListener('input', () => {
-        heatmapVal.textContent = parseFloat(heatmapSlider.value).toFixed(1);
+        heatmapVal.textContent = parseFloat(heatmapSlider.value).toFixed(2);
         setHeatmapHeight(parseFloat(heatmapSlider.value));
-    });
-    
-    // Labels toggle (for future use)
-    document.getElementById('toggle-labels').addEventListener('change', () => {
-        // TODO: implement label visibility
     });
 }
 
@@ -191,6 +191,8 @@ function selectReceiver(name, container) {
     
     if (name === 'all') {
         container.querySelector('.all-active').classList.add('active');
+        setActiveReceiver('all');
+        filterRaysByReceiver('all');
         closeCSI(); // Close CSI panel when "All" is selected
     } else {
         const card = container.querySelector(`[data-name="${name}"]`);
@@ -305,8 +307,21 @@ function updateSignalInfo(receiverName) {
     }
     
     // Calculate distance from Tx
-    const rxConfig = lastSimResult.paths?.find(p => p.receiver === receiverName);
-    if (rxConfig) {
+    if (currentSceneInfo && currentSceneInfo.transmitter && currentSceneInfo.receivers) {
+        const txPos = currentSceneInfo.transmitter.position;
+        const rx = currentSceneInfo.receivers.find(r => r.name === receiverName);
+        if (rx) {
+            const rxPos = rx.position;
+            const dist = Math.sqrt(
+                Math.pow(txPos[0] - rxPos[0], 2) +
+                Math.pow(txPos[1] - rxPos[1], 2) +
+                Math.pow(txPos[2] - rxPos[2], 2)
+            );
+            document.getElementById('info-distance').textContent = `${dist.toFixed(2)} m`;
+        } else {
+            document.getElementById('info-distance').textContent = '—';
+        }
+    } else {
         document.getElementById('info-distance').textContent = '—';
     }
 }

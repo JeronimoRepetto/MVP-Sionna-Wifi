@@ -65,7 +65,7 @@ RT_SPECULAR = True     # Reflexión especular habilitada
 # Materials (ITU-R P.2040)
 # =============================================================================
 MATERIALS = {
-    "walls": "itu_concrete",
+    "walls": "itu_brick",
     "floor": "itu_concrete",
     "ceiling": "itu_concrete",
 }

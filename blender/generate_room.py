@@ -158,6 +158,7 @@ def generate_room():
     
     # Create materials
     mat_itu_concrete = create_itu_material("itu_concrete")
+    mat_itu_brick = create_itu_material("itu_brick")
     mat_visual_concrete = create_visual_material("Visual_Concrete")
     mat_visual_floor = create_visual_material("Visual_Floor", color=(0.45, 0.43, 0.4, 1.0))
     
@@ -177,7 +178,7 @@ def generate_room():
         rotation=(math.pi / 2, 0, 0),
         scale=(ROOM_W, ROOM_H, 1),
         collection=col_sionna,
-        material=mat_itu_concrete
+        material=mat_itu_brick
     )
     
     # Back wall (Y=ROOM_D plane, facing -Y into room)
@@ -187,7 +188,7 @@ def generate_room():
         rotation=(math.pi / 2, 0, 0),
         scale=(ROOM_W, ROOM_H, 1),
         collection=col_sionna,
-        material=mat_itu_concrete
+        material=mat_itu_brick
     )
     flip_normals(wall_back)
     
@@ -198,7 +199,7 @@ def generate_room():
         rotation=(math.pi / 2, 0, math.pi / 2),
         scale=(ROOM_D, ROOM_H, 1),
         collection=col_sionna,
-        material=mat_itu_concrete
+        material=mat_itu_brick
     )
     
     # Right wall (X=ROOM_W plane, facing -X into room)
@@ -208,7 +209,7 @@ def generate_room():
         rotation=(math.pi / 2, 0, math.pi / 2),
         scale=(ROOM_D, ROOM_H, 1),
         collection=col_sionna,
-        material=mat_itu_concrete
+        material=mat_itu_brick
     )
     flip_normals(wall_right)
     

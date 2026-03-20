@@ -26,7 +26,7 @@ No physical hardware required. No SMPL body model (yet).
 |-----------|-------|
 | Room dimensions | 2.0 × 3.5 × 2.0 m |
 | Wall thickness | 0.12 m (concrete) |
-| Wall material | `itu_concrete` (ITU-R P.2040) |
+| Wall material | `itu_brick` (ITU-R P.2040) |
 | WiFi frequency | 2.437 GHz (Channel 6) |
 | Bandwidth | 40 MHz (HT40, 802.11n) |
 | Subcarriers | 114 (108 data) |

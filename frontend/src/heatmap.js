@@ -28,64 +28,71 @@ export function createHeatmap(scene, coverageData, roomConfig, offset = { x: 0, 
     clearHeatmap(scene);
     
     heatmapData = coverageData;
+    heatmapMesh = new THREE.Group();
+    heatmapMesh.name = 'heatmap_volume';
     
     const gridW = coverageData.grid_size[0];
     const gridH = coverageData.grid_size[1];
-    const data = coverageData.data;
     
     const roomW = roomConfig.width;
     const roomD = roomConfig.depth;
     
-    // Create texture from coverage data
-    const canvas = document.createElement('canvas');
-    canvas.width = gridW;
-    canvas.height = gridH;
-    const ctx = canvas.getContext('2d');
-    
-    const imageData = ctx.createImageData(gridW, gridH);
     const minDb = coverageData.min_db;
     const maxDb = coverageData.max_db;
     const range = maxDb - minDb || 1;
     
-    for (let i = 0; i < gridW; i++) {
-        for (let j = 0; j < gridH; j++) {
-            const value = data[i][j];
-            const normalized = Math.max(0, Math.min(1, (value - minDb) / range));
-            const [r, g, b] = jetColor(normalized);
-            
-            // Note: canvas y is flipped
-            const pixelIdx = ((gridH - 1 - j) * gridW + i) * 4;
-            imageData.data[pixelIdx] = Math.round(r * 255);
-            imageData.data[pixelIdx + 1] = Math.round(g * 255);
-            imageData.data[pixelIdx + 2] = Math.round(b * 255);
-            imageData.data[pixelIdx + 3] = 180; // Semi-transparent
+    const opacitySlider = document.getElementById('heatmap-height');
+    const baseOpacity = opacitySlider ? parseFloat(opacitySlider.value) : 0.3;
+    
+    coverageData.slices.forEach(slice => {
+        const data = slice.data;
+        const canvas = document.createElement('canvas');
+        canvas.width = gridW;
+        canvas.height = gridH;
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.createImageData(gridW, gridH);
+        
+        for (let i = 0; i < gridW; i++) {
+            for (let j = 0; j < gridH; j++) {
+                const value = data[i][j];
+                const normalized = Math.max(0, Math.min(1, (value - minDb) / range));
+                const [r, g, b] = jetColor(normalized);
+                
+                const pixelIdx = ((gridH - 1 - j) * gridW + i) * 4;
+                imageData.data[pixelIdx] = Math.round(r * 255);
+                imageData.data[pixelIdx + 1] = Math.round(g * 255);
+                imageData.data[pixelIdx + 2] = Math.round(b * 255);
+                imageData.data[pixelIdx + 3] = Math.floor(normalized * 200 + 55); 
+            }
         }
-    }
-    
-    ctx.putImageData(imageData, 0, 0);
-    
-    // Create texture
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.magFilter = THREE.LinearFilter;
-    texture.minFilter = THREE.LinearFilter;
-    
-    // Create plane at coverage height
-    const geometry = new THREE.PlaneGeometry(roomW, roomD);
-    const material = new THREE.MeshBasicMaterial({
-        map: texture,
-        transparent: true,
-        opacity: 0.7,
-        side: THREE.DoubleSide,
-        depthWrite: false,
+        
+        ctx.putImageData(imageData, 0, 0);
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.magFilter = THREE.LinearFilter;
+        texture.minFilter = THREE.LinearFilter;
+        
+        const phys_W = coverageData.physical_size ? coverageData.physical_size[0] : roomW;
+        const phys_D = coverageData.physical_size ? coverageData.physical_size[1] : roomD;
+        
+        const geometry = new THREE.PlaneGeometry(phys_W, phys_D);
+        const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            transparent: true,
+            opacity: baseOpacity,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+            blending: THREE.NormalBlending
+        });
+        
+        const plane = new THREE.Mesh(geometry, material);
+        plane.position.set(
+            roomW / 2 + offset.x,
+            roomD / 2 + offset.y,
+            slice.height
+        );
+        heatmapMesh.add(plane);
     });
-    
-    heatmapMesh = new THREE.Mesh(geometry, material);
-    heatmapMesh.position.set(
-        roomW / 2 + offset.x,
-        roomD / 2 + offset.y,
-        coverageData.height
-    );
-    heatmapMesh.name = 'heatmap';
     
     scene.add(heatmapMesh);
     
@@ -114,9 +121,11 @@ function jetColor(t) {
     return [last[1], last[2], last[3]];
 }
 
-export function setHeatmapHeight(height) {
+export function setHeatmapHeight(opacity) {
     if (heatmapMesh) {
-        heatmapMesh.position.z = height;
+        heatmapMesh.children.forEach(plane => {
+            plane.material.opacity = opacity;
+        });
     }
 }
 
@@ -129,11 +138,13 @@ export function setHeatmapVisible(visible) {
 export function clearHeatmap(scene) {
     if (heatmapMesh) {
         scene.remove(heatmapMesh);
-        if (heatmapMesh.geometry) heatmapMesh.geometry.dispose();
-        if (heatmapMesh.material) {
-            if (heatmapMesh.material.map) heatmapMesh.material.map.dispose();
-            heatmapMesh.material.dispose();
-        }
+        heatmapMesh.children.forEach(plane => {
+            if (plane.geometry) plane.geometry.dispose();
+            if (plane.material) {
+                if (plane.material.map) plane.material.map.dispose();
+                plane.material.dispose();
+            }
+        });
         heatmapMesh = null;
     }
 }

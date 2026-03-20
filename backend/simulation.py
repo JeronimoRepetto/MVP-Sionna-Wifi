@@ -216,30 +216,42 @@ def _compute_csi(paths):
     return csi_data
 
 
-def _compute_coverage(scene, max_depth, height):
-    """Compute a 2D coverage map at a given height."""
-    cm = rt.CoverageMap(
-        scene=scene,
-        max_depth=max_depth,
-        cm_cell_size=[COVERAGE_GRID_RESOLUTION, COVERAGE_GRID_RESOLUTION],
-        cm_center=[ROOM_WIDTH / 2, ROOM_DEPTH / 2, height],
-        cm_orientation=[0, 0, 0],
-        cm_size=[ROOM_WIDTH, ROOM_DEPTH],
-        num_samples=500_000,
-    )
+def _compute_coverage(scene, max_depth, _):
+    """Compute a volumetric 3D coverage map by stacking 2D slices."""
+    heights = np.linspace(0.1, 1.9, 10)
+    slices = []
     
-    coverage_data = cm().numpy()[0]  # [grid_x, grid_y]
+    cm_width = ROOM_WIDTH + 1.0
+    cm_depth = ROOM_DEPTH + 1.0
     
-    # Convert to dB
-    coverage_db = 10 * np.log10(coverage_data + 1e-30)
+    for h in heights:
+        cm = rt.CoverageMap(
+            scene=scene,
+            max_depth=max_depth,
+            cm_cell_size=[COVERAGE_GRID_RESOLUTION, COVERAGE_GRID_RESOLUTION],
+            cm_center=[ROOM_WIDTH / 2, ROOM_DEPTH / 2, float(h)],
+            cm_orientation=[0, 0, 0],
+            cm_size=[cm_width, cm_depth],
+            num_samples=100_000,
+        )
+        
+        coverage_data = cm().numpy()[0]
+        coverage_db = 10 * np.log10(coverage_data + 1e-30)
+        
+        slices.append({
+            "height": float(h),
+            "data": coverage_db.tolist()
+        })
+        
+    all_data = [s["data"] for s in slices]
     
     return {
-        "data": coverage_db.tolist(),
-        "min_db": float(np.min(coverage_db)),
-        "max_db": float(np.max(coverage_db)),
+        "slices": slices,
+        "min_db": float(np.min(all_data)),
+        "max_db": float(np.max(all_data)),
         "resolution": COVERAGE_GRID_RESOLUTION,
-        "height": height,
-        "grid_size": list(coverage_db.shape),
+        "grid_size": list(np.array(all_data[0]).shape),
+        "physical_size": [cm_width, cm_depth]
     }
 
 
@@ -401,38 +413,46 @@ def _generate_mock_paths(tx_pos, rx_pos, max_depth):
     return paths
 
 
-def _mock_coverage(height):
-    """Generate a realistic mock coverage map."""
+def _mock_coverage(_):
+    """Generate a realistic mock 3D coverage map."""
     tx_pos = np.array(TRANSMITTER["position"])
     
-    # Create grid
-    nx = int(ROOM_WIDTH / COVERAGE_GRID_RESOLUTION)
-    ny = int(ROOM_DEPTH / COVERAGE_GRID_RESOLUTION)
+    cm_width = ROOM_WIDTH + 1.0
+    cm_depth = ROOM_DEPTH + 1.0
     
-    coverage = np.zeros((nx, ny))
+    nx = int(cm_width / COVERAGE_GRID_RESOLUTION)
+    ny = int(cm_depth / COVERAGE_GRID_RESOLUTION)
     
-    for i in range(nx):
-        for j in range(ny):
-            x = (i + 0.5) * COVERAGE_GRID_RESOLUTION
-            y = (j + 0.5) * COVERAGE_GRID_RESOLUTION
-            
-            # Free-space path loss
-            dist = np.sqrt((x - tx_pos[0])**2 + (y - tx_pos[1])**2 + 
-                          (height - tx_pos[2])**2)
-            fspl = -20 * np.log10(4 * np.pi * dist * WIFI_FREQUENCY / 3e8 + 1e-10)
-            
-            # Add multipath fading effect
-            fading = 2 * np.sin(2 * np.pi * x * 3) * np.sin(2 * np.pi * y * 2)
-            
-            coverage[i, j] = fspl + fading + np.random.randn() * 1
+    heights = np.linspace(0.1, 1.9, 10)
+    slices = []
+    
+    for h in heights:
+        coverage = np.zeros((nx, ny))
+        for i in range(nx):
+            for j in range(ny):
+                # Offset the calculation coordinates to match the expanded grid center
+                x = (i + 0.5) * COVERAGE_GRID_RESOLUTION - 0.5 
+                y = (j + 0.5) * COVERAGE_GRID_RESOLUTION - 0.5
+                
+                dist = np.sqrt((x - tx_pos[0])**2 + (y - tx_pos[1])**2 + (h - tx_pos[2])**2)
+                fspl = -20 * np.log10(4 * np.pi * dist * WIFI_FREQUENCY / 3e8 + 1e-10)
+                fading = 2 * np.sin(2 * np.pi * x * 3) * np.sin(2 * np.pi * y * 2) * np.sin(2 * np.pi * h * 4)
+                coverage[i, j] = fspl + fading + np.random.randn() * 1
+                
+        slices.append({
+            "height": float(h),
+            "data": coverage.tolist()
+        })
+        
+    all_data = [s["data"] for s in slices]
     
     return {
-        "data": coverage.tolist(),
-        "min_db": float(np.min(coverage)),
-        "max_db": float(np.max(coverage)),
+        "slices": slices,
+        "min_db": float(np.min(all_data)),
+        "max_db": float(np.max(all_data)),
         "resolution": COVERAGE_GRID_RESOLUTION,
-        "height": height,
         "grid_size": [nx, ny],
+        "physical_size": [cm_width, cm_depth]
     }
 
 
