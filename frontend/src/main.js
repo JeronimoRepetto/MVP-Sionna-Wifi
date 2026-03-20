@@ -11,7 +11,7 @@ import { createSensors, updateSensorAnimations, setActiveReceiver } from './sens
 import { createRays, updateRayAnimations, clearRays } from './rays.js';
 import { createHeatmap, setHeatmapVisible } from './heatmap.js';
 import { initControls, populateReceiverList, updateConnectionStatus, 
-         showProgress, resetSimulateButton, setSimulationResult } from './controls.js';
+         showProgress, resetSimulateButton, setSimulationResult, runNextLiveSimulation } from './controls.js';
 import { initWebSocket, sendMessage } from './websocket.js';
 
 // =============================================================================
@@ -145,6 +145,20 @@ function setupScene(info) {
     camera.position.set(maxDim * 1.5, -maxDim * 1.5, maxDim * 1.8);
     controls.target.set(0, 0, info.room.height * 0.4);
     controls.update();
+
+    // Update Sionna status badge
+    const badge = document.getElementById('sionna-badge');
+    if (badge) {
+        if (info.sionna_active) {
+            badge.textContent = "🟢 Sionna RT: Active";
+            badge.style.backgroundColor = "rgba(40, 167, 69, 0.2)";
+            badge.style.color = "#4ade80"; // Bright Green
+        } else {
+            badge.textContent = "🟠 Sionna RT: Mock Mode";
+            badge.style.backgroundColor = "rgba(255, 193, 7, 0.2)";
+            badge.style.color = "#fbbf24"; // Amber
+        }
+    }
     
     console.log('✅ Scene setup complete:', info);
 }
@@ -201,6 +215,9 @@ function onSimulationComplete(data) {
     }
     
     console.log('✅ Visualization updated with simulation results');
+    
+    // Trigger next loop frame if live simulation is active
+    runNextLiveSimulation();
 }
 
 // =============================================================================

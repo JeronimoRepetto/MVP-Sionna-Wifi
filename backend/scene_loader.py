@@ -176,6 +176,7 @@ def get_scene_info(scene):
         "frequency_ghz": WIFI_FREQUENCY / 1e9,
         "bandwidth_mhz": 40,
         "num_subcarriers": 114,
+        "sionna_active": HAS_SIONNA,
     }
 
 

@@ -103,31 +103,65 @@ uvicorn
 websockets
 ```
 
-## Quick Start
+## Setup & Installation (Windows / WSL2)
 
-### 1. Generate Room in Blender
+NVIDIA Sionna requires a Linux environment to utilize hardware GPU acceleration via TensorFlow. On Windows, you MUST use WSL2 (Ubuntu).
 
+### 1. Prepare WSL2 (Ubuntu) Environment
+First, ensure you have an Ubuntu distribution installed in WSL2:
 ```bash
-blender --background --python blender/generate_room.py
+wsl --install -d Ubuntu-22.04
+```
+*Note: After installing, open the "Ubuntu 22.04" app from your Windows Start Menu to set up your UNIX username and password.*
+
+### 2. Install Python 3.10 and Sionna in WSL2
+Sionna is officially supported on Python 3.10. Open your **Ubuntu terminal** and run:
+```bash
+# Install Miniconda
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+bash Miniconda3-latest-Linux-x86_64.sh -b
+~/miniconda3/bin/conda init bash
+source ~/.bashrc
+
+# Accept Conda Terms of Service
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+
+# Create Python environment
+conda create -n sionna python=3.10 -y
+conda activate sionna
+
+# Install CUDA toolkit (if not already installed via Windows drivers)
+sudo apt update
+sudo apt install -y nvidia-cuda-toolkit
 ```
 
-### 2. Start Backend
-
+### 3. Install Backend Dependencies
+Navigate to your project folder from *inside* the Ubuntu terminal (e.g., `/mnt/c/Users/YourUser/Desktop/MVP-Sionna-Wifi`):
 ```bash
-cd backend
+cd /mnt/c/Users/jeron/Desktop/MVP-Sionna-Wifi/backend
 pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8000
+pip install sionna tensorflow
 ```
 
-### 3. Start Frontend
+### 4. Running the Project
 
+**Start Backend (from Ubuntu WSL Terminal)**
+```bash
+conda activate sionna
+cd /mnt/c/Users/jeron/Desktop/MVP-Sionna-Wifi/backend
+python main.py
+```
+*(If you see `🟢 Sionna RT: Active` in the web UI, it is using your GPU!)*
+
+**Start Frontend (from Windows PowerShell)**
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-Open `http://localhost:5173` and click **Run Simulation**.
+Open `http://localhost:5173` in your browser.
 
 ## Roadmap
 

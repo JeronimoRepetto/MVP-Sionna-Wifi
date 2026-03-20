@@ -394,6 +394,22 @@ html, body {
     font-size: 11px;
     color: var(--text-secondary);
     font-style: italic;
+    min-height: 16px;
+}
+
+.progress-container {
+    transition: opacity 0.3s ease;
+}
+
+.progress-container.hidden {
+    display: block !important;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.progress-msg.hidden {
+    display: block !important;
+    opacity: 0;
 }
 
 .hidden {

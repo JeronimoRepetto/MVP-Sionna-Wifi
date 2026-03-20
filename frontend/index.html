@@ -14,11 +14,13 @@
         <!-- Header -->
         <header id="header">
             <div class="header-left">
+            <div class="header-left">
                 <div class="logo">
                     <span class="logo-icon">📡</span>
                     <h1>Sionna<span class="accent">WiFi</span></h1>
                 </div>
                 <span class="version">v0.1 MVP</span>
+                <span id="sionna-badge" class="version" style="margin-left: 10px; background: rgba(255,255,255,0.1); color: #ccc;">Sionna RT: Checking...</span>
             </div>
             <div class="header-center">
                 <div id="connection-status" class="status-badge disconnected">
@@ -52,9 +54,8 @@
                         <span class="section-icon">⚡</span>
                         Simulation
                     </h2>
-                    <button id="btn-simulate" class="btn-primary">
-                        <span class="btn-icon">▶</span>
-                        Run Simulation
+                    <button id="btn-simulate" class="btn btn-primary">
+                        <span class="btn-icon">▶</span> START LIVE SIM
                     </button>
                     <div id="progress-bar" class="progress-container hidden">
                         <div class="progress-fill"></div>

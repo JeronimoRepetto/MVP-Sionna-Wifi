@@ -13,6 +13,18 @@ let lastSimResult = null;
 
 let selectedReceiver = 'all';
 let onSimulateCallback = null;
+let isLiveSimulation = false;
+
+export function runNextLiveSimulation() {
+    if (isLiveSimulation && isConnected()) {
+        // Small delay to let the UI update and render before next intense calculation
+        setTimeout(() => {
+            if (isLiveSimulation) {
+                requestSimulation(getSimulationParams());
+            }
+        }, 100);
+    }
+}
 
 export function initControls(onSimulate) {
     initCSIPanel();
@@ -26,19 +38,26 @@ export function initControls(onSimulate) {
 function setupSimulationButton() {
     const btn = document.getElementById('btn-simulate');
     btn.addEventListener('click', () => {
+        if (isLiveSimulation) {
+            // Stop
+            isLiveSimulation = false;
+            resetSimulateButton();
+            showProgress(1, 'Simulation stopped.');
+            return;
+        }
+
         if (!isConnected()) {
             // Fallback: use REST API
             runSimulationREST();
             return;
         }
         
-        const params = getSimulationParams();
-        btn.disabled = true;
+        isLiveSimulation = true;
         btn.classList.add('running');
-        btn.innerHTML = '<span class="btn-icon">⏳</span> Simulating...';
+        btn.innerHTML = '<span class="btn-icon">⏸</span> STOP LIVE SIM';
         
-        showProgress(0, 'Starting simulation...');
-        requestSimulation(params);
+        showProgress(0.1, 'Running continuously...');
+        requestSimulation(getSimulationParams());
     });
 }
 
@@ -80,9 +99,10 @@ function getSimulationParams() {
 
 export function resetSimulateButton() {
     const btn = document.getElementById('btn-simulate');
+    if (isLiveSimulation) return;
     btn.disabled = false;
     btn.classList.remove('running');
-    btn.innerHTML = '<span class="btn-icon">▶</span> Run Simulation';
+    btn.innerHTML = '<span class="btn-icon">▶</span> START LIVE SIM';
 }
 
 function setupParameterSliders() {
