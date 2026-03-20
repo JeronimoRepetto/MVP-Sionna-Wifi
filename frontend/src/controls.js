@@ -94,6 +94,7 @@ function getSimulationParams() {
         max_depth: parseInt(document.getElementById('param-depth').value),
         num_samples: parseInt(document.getElementById('param-samples').value),
         diffraction: document.getElementById('param-diffraction').checked,
+        heatmap_height: parseFloat(document.getElementById('heatmap-height').value) || 0.2,
     };
 }
 
@@ -203,8 +204,8 @@ function selectReceiver(name, container) {
             let csiData = null;
             let rssi = -90; // Default RSSI if not found
             if (lastSimResult) {
-                if (lastSimResult.csi && lastSimResult.csi[name]) {
-                    csiData = lastSimResult.csi[name];
+                if (lastSimResult.csi) {
+                    csiData = lastSimResult.csi.find(c => c.receiver === name);
                 }
                 
                 // Calculamos RSSI desde los paths

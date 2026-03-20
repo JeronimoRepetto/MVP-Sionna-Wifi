@@ -26,7 +26,8 @@ from config import (
 
 def run_simulation(scene, max_depth=6, num_samples=20000, 
                    diffraction=True, scattering=False,
-                   refraction=True, specular_reflection=True):
+                   refraction=True, specular_reflection=True,
+                   coverage_height=None):
     """
     Run the full ray tracing simulation.
     
@@ -38,6 +39,7 @@ def run_simulation(scene, max_depth=6, num_samples=20000,
         scattering: Override scattering toggle
         refraction: Override refraction toggle
         specular_reflection: Override specular reflection toggle
+        coverage_height: Override height for the 2D coverage map
         
     Returns:
         dict with paths, CIR, CSI, and coverage data serialized for frontend
@@ -46,17 +48,19 @@ def run_simulation(scene, max_depth=6, num_samples=20000,
     num_samples = num_samples or RT_NUM_SAMPLES
     diffraction = diffraction if diffraction is not None else RT_DIFFRACTION
     scattering = scattering if scattering is not None else RT_SCATTERING
+    coverage_height = coverage_height if coverage_height is not None else COVERAGE_HEIGHT
     
     if not HAS_SIONNA or (isinstance(scene, dict) and scene.get("type") == "mock"):
-        return _mock_simulation(max_depth, num_samples)
+        return _mock_simulation(max_depth, num_samples, coverage_height)
     
     return _run_sionna_simulation(scene, max_depth, num_samples, 
                                       diffraction, scattering, 
-                                      refraction, specular_reflection)
+                                      refraction, specular_reflection,
+                                      coverage_height)
 
 
 def _run_sionna_simulation(scene, max_depth, num_samples, diffraction, scattering,
-                           refraction, specular_reflection):
+                           refraction, specular_reflection, coverage_height):
     """Run actual Sionna RT ray tracing."""
     print(f"\n{'='*60}")
     print(f"Running Sionna RT Simulation")
@@ -96,7 +100,7 @@ def _run_sionna_simulation(scene, max_depth, num_samples, diffraction, scatterin
     }
     
     # Compute coverage map
-    results["coverage"] = _compute_coverage(scene, max_depth)
+    results["coverage"] = _compute_coverage(scene, max_depth, coverage_height)
     
     return results
 
@@ -212,13 +216,13 @@ def _compute_csi(paths):
     return csi_data
 
 
-def _compute_coverage(scene, max_depth):
+def _compute_coverage(scene, max_depth, height):
     """Compute a 2D coverage map at a given height."""
     cm = rt.CoverageMap(
         scene=scene,
         max_depth=max_depth,
         cm_cell_size=[COVERAGE_GRID_RESOLUTION, COVERAGE_GRID_RESOLUTION],
-        cm_center=[ROOM_WIDTH / 2, ROOM_DEPTH / 2, COVERAGE_HEIGHT],
+        cm_center=[ROOM_WIDTH / 2, ROOM_DEPTH / 2, height],
         cm_orientation=[0, 0, 0],
         cm_size=[ROOM_WIDTH, ROOM_DEPTH],
         num_samples=500_000,
@@ -234,7 +238,7 @@ def _compute_coverage(scene, max_depth):
         "min_db": float(np.min(coverage_db)),
         "max_db": float(np.max(coverage_db)),
         "resolution": COVERAGE_GRID_RESOLUTION,
-        "height": COVERAGE_HEIGHT,
+        "height": height,
         "grid_size": list(coverage_db.shape),
     }
 
@@ -242,7 +246,7 @@ def _compute_coverage(scene, max_depth):
 # =============================================================================
 # Mock simulation for frontend development without GPU
 # =============================================================================
-def _mock_simulation(max_depth, num_samples):
+def _mock_simulation(max_depth, num_samples, coverage_height):
     """Generate realistic-looking mock data for frontend development."""
     np.random.seed(42)
     
@@ -259,7 +263,7 @@ def _mock_simulation(max_depth, num_samples):
         "paths": [],
         "cir": [],
         "csi": [],
-        "coverage": _mock_coverage(),
+        "coverage": _mock_coverage(coverage_height),
     }
     
     for rx_name, rx_config in RECEIVERS.items():
@@ -397,7 +401,7 @@ def _generate_mock_paths(tx_pos, rx_pos, max_depth):
     return paths
 
 
-def _mock_coverage():
+def _mock_coverage(height):
     """Generate a realistic mock coverage map."""
     tx_pos = np.array(TRANSMITTER["position"])
     
@@ -414,7 +418,7 @@ def _mock_coverage():
             
             # Free-space path loss
             dist = np.sqrt((x - tx_pos[0])**2 + (y - tx_pos[1])**2 + 
-                          (COVERAGE_HEIGHT - tx_pos[2])**2)
+                          (height - tx_pos[2])**2)
             fspl = -20 * np.log10(4 * np.pi * dist * WIFI_FREQUENCY / 3e8 + 1e-10)
             
             # Add multipath fading effect
@@ -427,7 +431,7 @@ def _mock_coverage():
         "min_db": float(np.min(coverage)),
         "max_db": float(np.max(coverage)),
         "resolution": COVERAGE_GRID_RESOLUTION,
-        "height": COVERAGE_HEIGHT,
+        "height": height,
         "grid_size": [nx, ny],
     }
 

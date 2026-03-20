@@ -81,7 +81,12 @@ export function updateBaseData(csiData, rssiData) {
     // If not matching, pad or truncate
     const subcount = Math.min(MAX_SUBCARRIERS, csiData.length / 2);
     for (let i = 0; i < subcount; i++) {
-        baseCSI_Amp[i] = csiData[2*i] * 50;   // Scaling factor for visibility
+        let db = csiData[2*i]; 
+        // Normalize dB from [-100, -30] to [0.0, 1.0] approx
+        let normAmp = (db + 100) / 70;
+        normAmp = Math.max(0.01, Math.min(1.0, normAmp));
+        
+        baseCSI_Amp[i] = normAmp * 100; // Map to 0-100 scale for drawing
         baseCSI_Phase[i] = csiData[2*i + 1];
     }
 }

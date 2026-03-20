@@ -60,6 +60,7 @@ async def simulate(
     max_depth: Optional[int] = None,
     num_samples: Optional[int] = None,
     diffraction: Optional[bool] = None,
+    heatmap_height: Optional[float] = None,
 ):
     """
     Run ray tracing simulation with optional parameter overrides.
@@ -72,6 +73,7 @@ async def simulate(
         max_depth=max_depth,
         num_samples=num_samples,
         diffraction=diffraction,
+        coverage_height=heatmap_height,
     )
     
     last_simulation_result = result
@@ -129,6 +131,7 @@ async def websocket_simulation(websocket: WebSocket):
                     max_depth=params.get("max_depth"),
                     num_samples=params.get("num_samples"),
                     diffraction=params.get("diffraction"),
+                    coverage_height=params.get("heatmap_height"),
                 )
                 
                 global last_simulation_result
