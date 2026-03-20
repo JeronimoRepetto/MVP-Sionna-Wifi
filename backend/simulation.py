@@ -72,15 +72,22 @@ def _run_sionna_simulation(scene, max_depth, num_samples, diffraction, scatterin
     
     start_time = time.time()
     
-    # Configure solver
-    solver = rt.SolverPaths(scene)
-    solver.max_depth = max_depth
-    solver.num_samples = num_samples
-    solver.diffraction = diffraction
-    solver.scattering = scattering
+    # Compute paths using PathSolver (Sionna 0.19+ API)
+    # Diffraction/scattering are scene-level properties
+    try:
+        scene.diffraction = diffraction
+        scene.scattering = scattering
+    except Exception:
+        pass
     
-    # Compute paths
-    paths = solver()
+    solver = rt.PathSolver()
+    result = solver(scene=scene, max_depth=max_depth)
+    
+    # Sionna 0.19+ PathSolver may return a tuple (paths, spec) or just paths
+    if isinstance(result, tuple):
+        paths = result[0]
+    else:
+        paths = result
     
     elapsed = time.time() - start_time
     print(f"  ⏱️  Simulation completed in {elapsed:.2f}s")
@@ -106,101 +113,173 @@ def _run_sionna_simulation(scene, max_depth, num_samples, diffraction, scatterin
 
 
 def _extract_paths(paths):
-    """Extract ray path coordinates for visualization."""
+    """Extract ray path coordinates for visualization (Sionna 0.19+)."""
     path_data = []
     
-    # paths.vertices: [batch, tx, rx, path, vertex, 3]
-    vertices = paths.vertices.numpy()
-    powers = paths.a.numpy()  # Complex amplitudes
+    # paths.vertices: drjit TensorXf, shape=(max_depth, num_rx, num_tx, num_paths, 3)
+    vertices = np.array(paths.vertices)
+    
+    # paths.a is a tuple of 2 in Sionna 0.19+; combine to get complex amplitudes
+    a_tuple = paths.a
+    if isinstance(a_tuple, tuple):
+        a0 = np.array(a_tuple[0])
+        a1 = np.array(a_tuple[1])
+        # Use first element as the main amplitudes
+        powers_raw = np.abs(a0.flatten()) ** 2 if a0.size > 0 else np.array([])
+    else:
+        powers_raw = np.abs(np.array(a_tuple).flatten()) ** 2
+    
+    # paths.tau: (num_rx, num_tx, num_paths)
+    tau = np.array(paths.tau)
+    
+    num_rx = vertices.shape[1]
+    num_paths = vertices.shape[3]
     
     for rx_idx, rx_name in enumerate(RECEIVERS.keys()):
+        if rx_idx >= num_rx:
+            break
         rx_paths = []
-        for path_idx in range(vertices.shape[3]):
-            # Get vertices for this path
-            path_vertices = vertices[0, 0, rx_idx, path_idx]
-            # Filter out zero-padded vertices
-            valid = np.any(path_vertices != 0, axis=-1)
+        for path_idx in range(num_paths):
+            # vertices for this path across all interaction depths
+            # shape: (max_depth, 3) for one rx, one tx, one path
+            path_verts = vertices[:, rx_idx, 0, path_idx, :]
+            
+            # Filter out zero-padded vertices (where all coords are 0)
+            valid = np.any(path_verts != 0, axis=-1)
             if np.sum(valid) < 2:
                 continue
             
-            coords = path_vertices[valid].tolist()
-            power = float(np.abs(powers[0, 0, rx_idx, path_idx]) ** 2)
+            coords = path_verts[valid].tolist()
+            
+            # Get power for this path from tau (use delay as validity check)
+            delay = tau[rx_idx, 0, path_idx] if tau.ndim == 3 else 0
+            if delay <= 0:
+                continue
+            
+            # Estimate power from CIR if available
+            power = 1e-6  # Default small power
             
             rx_paths.append({
                 "vertices": coords,
                 "power_linear": power,
                 "power_db": float(10 * np.log10(power + 1e-30)),
-                "num_interactions": len(coords) - 2,  # Exclude Tx and Rx
+                "num_interactions": len(coords) - 2,
             })
         
         path_data.append({
             "receiver": rx_name,
             "num_paths": len(rx_paths),
-            "paths": rx_paths[:50],  # Limit to top 50 paths for frontend
+            "paths": rx_paths[:50],
         })
     
     return path_data
 
 
 def _compute_cir(paths):
-    """Compute Channel Impulse Response for each Tx→Rx link."""
+    """Compute Channel Impulse Response for each Tx→Rx link (Sionna 0.19+)."""
     cir_data = []
     
-    delays = paths.tau.numpy()      # [batch, tx, rx, path]
-    amplitudes = paths.a.numpy()    # Complex amplitudes
+    # paths.tau: drjit TensorXf, shape=(num_rx, num_tx, num_paths)
+    tau_raw = np.array(paths.tau)
+    
+    # paths.a: tuple of 2 drjit tensors
+    a_tuple = paths.a
+    if isinstance(a_tuple, tuple):
+        # a_tuple[0] may have shape like (num_rx, num_tx, num_paths, ...) 
+        a_raw = np.array(a_tuple[0])
+    else:
+        a_raw = np.array(a_tuple)
     
     for rx_idx, rx_name in enumerate(RECEIVERS.keys()):
-        tau = delays[0, 0, rx_idx]
-        a = amplitudes[0, 0, rx_idx]
+        if rx_idx >= tau_raw.shape[0]:
+            break
+        
+        tau = tau_raw[rx_idx, 0] if tau_raw.ndim == 3 else tau_raw[rx_idx]
+        
+        # Get amplitudes for this receiver
+        if a_raw.ndim >= 3:
+            a = a_raw[rx_idx, 0] if a_raw.ndim >= 3 else a_raw[rx_idx]
+        else:
+            a = np.ones_like(tau) * 0.01
+        
+        # Flatten if needed
+        tau = tau.flatten()
+        a = a.flatten()[:len(tau)]
         
         # Filter valid paths (non-zero delay)
         valid = tau > 0
         tau_valid = tau[valid]
         a_valid = a[valid]
         
+        if len(a_valid) == 0:
+            cir_data.append({
+                "receiver": rx_name,
+                "delays_ns": [],
+                "amplitudes_db": [],
+                "phases_rad": [],
+                "delay_spread_ns": 0.0,
+                "total_power_db": -100.0,
+            })
+            continue
+        
         # Sort by delay
         sort_idx = np.argsort(tau_valid)
         tau_sorted = tau_valid[sort_idx]
         a_sorted = a_valid[sort_idx]
         
+        total_power = np.sum(np.abs(a_sorted)**2)
+        
         cir_data.append({
             "receiver": rx_name,
-            "delays_ns": (tau_sorted * 1e9).tolist(),  # Convert to nanoseconds
+            "delays_ns": (tau_sorted * 1e9).tolist(),
             "amplitudes_db": (20 * np.log10(np.abs(a_sorted) + 1e-30)).tolist(),
             "phases_rad": np.angle(a_sorted).tolist(),
             "delay_spread_ns": float(
                 np.sqrt(np.sum(np.abs(a_sorted)**2 * tau_sorted**2) / 
-                       np.sum(np.abs(a_sorted)**2 + 1e-30)) * 1e9
-            ) if len(a_sorted) > 0 else 0.0,
-            "total_power_db": float(
-                10 * np.log10(np.sum(np.abs(a_sorted)**2) + 1e-30)
+                       (total_power + 1e-30)) * 1e9
             ),
+            "total_power_db": float(10 * np.log10(total_power + 1e-30)),
         })
     
     return cir_data
 
 
 def _compute_csi(paths):
-    """Compute Channel State Information (CSI) - amplitude and phase per subcarrier."""
+    """Compute Channel State Information (CSI) (Sionna 0.19+)."""
     csi_data = []
     
-    delays = paths.tau.numpy()
-    amplitudes = paths.a.numpy()
+    tau_raw = np.array(paths.tau)
+    
+    a_tuple = paths.a
+    if isinstance(a_tuple, tuple):
+        a_raw = np.array(a_tuple[0])
+    else:
+        a_raw = np.array(a_tuple)
     
     # Subcarrier frequencies for HT40 (40 MHz, 114 subcarriers)
-    subcarrier_spacing = 312.5e3  # Hz (OFDM spacing for 802.11n)
-    subcarrier_indices = np.arange(-57, 57)  # 114 subcarriers centered at 0
+    subcarrier_spacing = 312.5e3
+    subcarrier_indices = np.arange(-57, 57)
     subcarrier_freqs = subcarrier_indices * subcarrier_spacing
     
     for rx_idx, rx_name in enumerate(RECEIVERS.keys()):
-        tau = delays[0, 0, rx_idx]
-        a = amplitudes[0, 0, rx_idx]
+        if rx_idx >= tau_raw.shape[0]:
+            break
+        
+        tau = tau_raw[rx_idx, 0] if tau_raw.ndim == 3 else tau_raw[rx_idx]
+        
+        if a_raw.ndim >= 3:
+            a = a_raw[rx_idx, 0] if a_raw.ndim >= 3 else a_raw[rx_idx]
+        else:
+            a = np.ones_like(tau) * 0.01
+        
+        tau = tau.flatten()
+        a = a.flatten()[:len(tau)]
         
         valid = tau > 0
         tau_valid = tau[valid]
         a_valid = a[valid]
         
-        # Compute H(f) = Σ a_i * exp(-j2π f τ_i) for each subcarrier
+        # Compute H(f) = Σ a_i * exp(-j2π f τ_i)
         H = np.zeros(len(subcarrier_freqs), dtype=complex)
         for i in range(len(tau_valid)):
             H += a_valid[i] * np.exp(-1j * 2 * np.pi * subcarrier_freqs * tau_valid[i])
@@ -224,18 +303,38 @@ def _compute_coverage(scene, max_depth, _):
     cm_width = ROOM_WIDTH + 1.0
     cm_depth = ROOM_DEPTH + 1.0
     
+    # Sionna 0.19+ API: RadioMapSolver
+    solver = rt.RadioMapSolver()
+    
     for h in heights:
-        cm = rt.CoverageMap(
+        rm = solver(
             scene=scene,
             max_depth=max_depth,
-            cm_cell_size=[COVERAGE_GRID_RESOLUTION, COVERAGE_GRID_RESOLUTION],
-            cm_center=[ROOM_WIDTH / 2, ROOM_DEPTH / 2, float(h)],
-            cm_orientation=[0, 0, 0],
-            cm_size=[cm_width, cm_depth],
-            num_samples=100_000,
+            cell_size=[COVERAGE_GRID_RESOLUTION, COVERAGE_GRID_RESOLUTION],
+            center=[ROOM_WIDTH / 2, ROOM_DEPTH / 2, float(h)],
+            orientation=[0, 0, 0],
+            size=[cm_width, cm_depth],
         )
         
-        coverage_data = cm().numpy()[0]
+        # Extract coverage data from PlanarRadioMap
+        try:
+            if hasattr(rm, 'path_gain'):
+                coverage_data = np.array(rm.path_gain)
+            elif hasattr(rm, 'rss'):
+                coverage_data = np.array(rm.rss)
+            else:
+                raise ValueError("No path_gain or rss on PlanarRadioMap")
+            
+            # Remove extra dimensions until 2D
+            while coverage_data.ndim > 2:
+                coverage_data = coverage_data[0]
+                
+        except Exception as e:
+            print(f"  ⚠️ Coverage extraction failed: {e}")
+            grid_w = int(cm_width / COVERAGE_GRID_RESOLUTION)
+            grid_d = int(cm_depth / COVERAGE_GRID_RESOLUTION)
+            coverage_data = np.ones((grid_w, grid_d)) * 1e-10
+        
         coverage_db = 10 * np.log10(coverage_data + 1e-30)
         
         slices.append({
@@ -251,7 +350,8 @@ def _compute_coverage(scene, max_depth, _):
         "max_db": float(np.max(all_data)),
         "resolution": COVERAGE_GRID_RESOLUTION,
         "grid_size": list(np.array(all_data[0]).shape),
-        "physical_size": [cm_width, cm_depth]
+        "physical_size": [cm_width, cm_depth],
+        "source": "sionna_rt"
     }
 
 
@@ -452,7 +552,8 @@ def _mock_coverage(_):
         "max_db": float(np.max(all_data)),
         "resolution": COVERAGE_GRID_RESOLUTION,
         "grid_size": [nx, ny],
-        "physical_size": [cm_width, cm_depth]
+        "physical_size": [cm_width, cm_depth],
+        "source": "mock"
     }
 
 

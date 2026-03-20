@@ -96,6 +96,14 @@ export function createHeatmap(scene, coverageData, roomConfig, offset = { x: 0, 
     
     scene.add(heatmapMesh);
     
+    // Update source badge in the UI
+    const sourceLabel = coverageData.source === 'sionna_rt' ? '🟢 Sionna RT' : '🟡 Mock Data';
+    const badge = document.getElementById('heatmap-source-badge');
+    if (badge) {
+        badge.textContent = sourceLabel;
+        badge.style.color = coverageData.source === 'sionna_rt' ? '#76B900' : '#f59e0b';
+    }
+    
     return heatmapMesh;
 }
 

@@ -178,7 +178,7 @@ def generate_room():
         rotation=(math.pi / 2, 0, 0),
         scale=(ROOM_W, ROOM_H, 1),
         collection=col_sionna,
-        material=mat_itu_brick
+        material=mat_itu_concrete
     )
     
     # Back wall (Y=ROOM_D plane, facing -Y into room)
@@ -188,7 +188,7 @@ def generate_room():
         rotation=(math.pi / 2, 0, 0),
         scale=(ROOM_W, ROOM_H, 1),
         collection=col_sionna,
-        material=mat_itu_brick
+        material=mat_itu_concrete
     )
     flip_normals(wall_back)
     
@@ -199,7 +199,7 @@ def generate_room():
         rotation=(math.pi / 2, 0, math.pi / 2),
         scale=(ROOM_D, ROOM_H, 1),
         collection=col_sionna,
-        material=mat_itu_brick
+        material=mat_itu_concrete
     )
     
     # Right wall (X=ROOM_W plane, facing -X into room)
@@ -209,7 +209,7 @@ def generate_room():
         rotation=(math.pi / 2, 0, math.pi / 2),
         scale=(ROOM_D, ROOM_H, 1),
         collection=col_sionna,
-        material=mat_itu_brick
+        material=mat_itu_concrete
     )
     flip_normals(wall_right)
     

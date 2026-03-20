@@ -65,58 +65,84 @@ def load_scene(scene_path=None):
 
 
 def _configure_materials(scene):
-    """Set physical thickness for concrete walls."""
-    for obj_name, obj in scene.objects.items():
-        # All surfaces in our simple room are concrete
-        for mat_name, mat in obj.radio_materials.items():
-            if "concrete" in mat_name.lower():
-                mat.thickness = WALL_THICKNESS
-                print(f"   Material '{mat_name}' on '{obj_name}': "
-                      f"thickness={WALL_THICKNESS}m")
+    """Set physical thickness for all wall/surface materials."""
+    configured = 0
+    
+    # Method 1: Try scene-level radio_materials (Sionna 0.16+)
+    try:
+        for mat_name, mat in scene.radio_materials.items():
+            mat.thickness = WALL_THICKNESS
+            print(f"   Material '{mat_name}': thickness={WALL_THICKNESS}m")
+            configured += 1
+    except AttributeError:
+        pass
+    
+    # Method 2: Try object-level radio_materials
+    if configured == 0:
+        try:
+            for obj_name, obj in scene.objects.items():
+                if hasattr(obj, 'radio_materials'):
+                    for mat_name, mat in obj.radio_materials.items():
+                        mat.thickness = WALL_THICKNESS
+                        print(f"   Material '{mat_name}' on '{obj_name}': "
+                              f"thickness={WALL_THICKNESS}m")
+                        configured += 1
+                elif hasattr(obj, 'radio_material'):
+                    mat = obj.radio_material
+                    if mat is not None:
+                        mat.thickness = WALL_THICKNESS
+                        print(f"   Material on '{obj_name}': thickness={WALL_THICKNESS}m")
+                        configured += 1
+        except Exception as e:
+            print(f"   ⚠️ Could not configure material thickness: {e}")
+    
+    if configured == 0:
+        print("   ⚠️ No radio materials found to configure thickness. "
+              "Sionna will use default ITU material properties.")
 
 
 def _add_transmitter(scene):
-    """Add the WiFi router as a transmitter with isotropic antenna."""
+    """Add the WiFi router as a transmitter."""
     tx_pos = TRANSMITTER["position"]
     tx_orient = TRANSMITTER.get("orientation", [0, 0, 0])
     
-    # Create antenna
-    if ANTENNA_PATTERN == "iso":
-        antenna = rt.Antenna("iso", "V")  # Isotropic, vertical polarization
-    else:
-        antenna = rt.Antenna("iso", "V")
-    
-    # Create antenna array (single antenna)
-    tx_array = rt.AntennaArray(antenna, positions=[[0, 0, 0]])
+    # In Sionna 0.19+, antenna arrays are set on the scene level
+    # scene.tx_array and scene.rx_array are shared by all Tx/Rx
+    try:
+        scene.tx_array = rt.PlanarArray(
+            num_rows=1, num_cols=1,
+            vertical_spacing=0.5, horizontal_spacing=0.5,
+            pattern="dipole", polarization="V"
+        )
+    except Exception as e:
+        print(f"   ⚠️ Could not set tx_array: {e}")
     
     # Add transmitter to scene
     tx = rt.Transmitter(
         name=TRANSMITTER["name"],
         position=tx_pos,
-        orientation=tx_orient,
-        antenna=tx_array
+        orientation=tx_orient
     )
     scene.add(tx)
 
 
 def _add_receivers(scene):
-    """Add all 8 ESP32-S3 receivers with isotropic antennas."""
-    # Create shared antenna
-    if ANTENNA_PATTERN == "dipole":
-        # PlanarArray(num_rows, num_cols, row_spacing, col_spacing, pattern, polarization)
-        # Emulando antena omnidireccional con patrón dipolo vertical
-        antenna = rt.PlanarArray(1, 1, 0.5, 0.5, pattern="dipole", polarization="V")
-    else:
-        antenna = rt.IsotropicAntenna(polarization="V")
-    
-    rx_array = rt.AntennaArray(antenna, positions=[[0, 0, 0]])
+    """Add all 8 ESP32-S3 receivers."""
+    # In Sionna 0.19+, antenna arrays are set on the scene level
+    try:
+        scene.rx_array = rt.PlanarArray(
+            num_rows=1, num_cols=1,
+            vertical_spacing=0.5, horizontal_spacing=0.5,
+            pattern="dipole", polarization="V"
+        )
+    except Exception as e:
+        print(f"   ⚠️ Could not set rx_array: {e}")
     
     for rx_name, rx_config in RECEIVERS.items():
         rx = rt.Receiver(
             name=rx_name,
             position=rx_config["position"],
-            orientation=[0, 0, 0],
-            antenna=rx_array
+            orientation=[0, 0, 0]
         )
         scene.add(rx)
 

@@ -10,8 +10,9 @@ They communicate in real-time using WebSockets, allowing the 3D visualization to
 The backend is responsible for physics simulation. It creates a digital replica of the physical environment and uses **NVIDIA Sionna** to fire thousands of electromagnetic rays and calculate how they bounce, refract, and diffract around the room.
 
 - **`config.py`**: The single source of truth for the physical setup (room dimensions, sensor positions, antenna types).
-- **`scene_loader.py`**: Translates `config.py` into a Sionna-compatible 3D scene. It places the walls (Concrete), the Router (Tx), and the 8 ESP32 receivers (Rx).
-  - *Crucial Detail*: The sensors are placed **outside** the concrete room walls. The backend explicitly enables **refraction** in Sionna so rays can penetrate the 12cm walls and reach the sensors.
+- **`scene_loader.py`**: Translates `config.py` into a Sionna-compatible 3D scene. It places the walls, the Router (Tx), and the 8 ESP32 receivers (Rx).
+  - *Crucial Detail*: The sensors are placed **outside** the room walls. The backend explicitly enables **refraction** in Sionna so rays can penetrate the walls and reach the sensors.
+  - *Material Thickness*: All radio materials (brick, concrete, wood, etc.) have their `thickness` set programmatically from `config.py`, ensuring realistic signal attenuation through walls.
   - *Antenna Pattern*: A 1x1 `PlanarArray` with a `dipole` pattern is used, mimicking the real-world vertical polarization antennas.
 - **`simulation.py`**: Executes the mathematical calculations (Shooting and Bouncing Rays). It computes paths, Channel Impulse Response (CIR), and the full 114-subcarrier Channel State Information (CSI).
 - **`main.py`**: The FastAPI server exposes `/api/simulate` and `/ws`.
@@ -22,7 +23,7 @@ The frontend is responsible for rendering the calculated data into an interactiv
 - **`scene3d.js`**: Recreates the room boundaries using Three.js lines and handles the camera orbit.
 - **`sensors.js`**: Draws the Transmitters (Orange) and Receivers (Purple).
 - **`rays.js`**: Visualizes the paths from the router to the ESP32s calculated by Sionna. It color-codes the rays based on their bounces.
-- **`heatmap.js`**: Renders the 2D signal strength coverage map across the room floor.
+- **`heatmap.js`**: Renders a **volumetric 3D heatmap** by stacking 10 semi-transparent planes at different heights (0.1m to 1.9m). Each layer maps signal strength using a Jet colormap. The heatmap extends 0.5m beyond the room walls to visualize signal penetration. A badge indicator shows whether the data comes from Sionna RT or mock calculations.
 - **`csi_panel.js`**: **The Spectrogram Monitor**. It replicates tools like `wifi-csi-capture`. When an ESP32 is selected, it displays 4 real-time Canvas charts:
   - Subcarrier Amplitude (114 bars)
   - Subcarrier Phase (Unwrapped radians)
@@ -38,8 +39,27 @@ NVIDIA Sionna relies heavily on **TensorFlow** to parallelize ray tracing on the
 The frontend features a real-time CSI panel that automatically pops up when an ESP32 receiver is clicked in the right sidebar. 
 Because Sionna computes a "static" snapshot of the room per simulation, the frontend injects micro-turbulence (Gaussian noise) into the static CSI data. This "fakes" the dynamic nature of an empty room over time, causing the Spectrogram and Phase charts to scroll and animate just like they would during a live physical capture.
 
-## 4. Next Steps
-To run this project with full Sionna capabilities:
-1. Ensure Docker Desktop or a default Ubuntu WSL2 distro is installed and configured (`wsl --set-default Ubuntu`).
-2. Run `pip install tensorflow==2.15.0 nvidia-sionna` inside the WSL environment.
-3. Start the backend with `python main.py` and the frontend with `npm run dev`.
+## 4. Performance: GPU vs CPU Mode
+
+Sionna RT is designed for **NVIDIA GPUs with CUDA**. In your WSL2 terminal, if you see:
+```
+Could not find cuda drivers on your machine, GPU will not be used.
+```
+Sionna is running in **CPU fallback mode**. It still produces correct results but:
+- Each frame takes **~0.15–0.5s** instead of ~0.02s
+- **CPU usage hits 100%** across all cores
+- **System temperature may rise significantly** — monitor with `sensors` (Linux) or HWMonitor (Windows)
+
+> **Tip**: Reduce `Max Reflections` (3–4) and `Ray Density` in the UI to lower CPU load.
+
+## 5. Setup
+
+See the [README](../README.md) for full installation instructions. Key steps:
+1. WSL2 Ubuntu + Miniconda with Python 3.10
+2. `pip install sionna tensorflow` inside the conda environment
+3. Start backend: `python main.py` / Frontend: `npm run dev`
+
+## 6. Roadmap: SMPL Human Body Integration
+The next major evolution is introducing a parametric human body (SMPL-X model) into the scene:
+- **Phase A**: Static human mesh injected into Sionna's scene, observable signal attenuation behind the body.
+- **Phase B**: Animated walking trajectory that dynamically modifies CSI patterns in real-time, demonstrating WiFi-based human activity recognition capabilities.
