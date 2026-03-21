@@ -59,7 +59,9 @@ def run_simulation(scene, max_depth=6, num_samples=20000,
                                           refraction, specular_reflection,
                                           coverage_height)
     except Exception as e:
+        import traceback
         print(f"\n❌ Sionna simulation failed: {e}")
+        traceback.print_exc()
         print("   Falling back to mock simulation for this request")
         result = _mock_simulation(max_depth, num_samples, coverage_height)
         result["error"] = str(e)

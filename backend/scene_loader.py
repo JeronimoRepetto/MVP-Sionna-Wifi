@@ -28,7 +28,7 @@ try:
     def _test_optix():
         """Test if OptiX works by loading a trivial Mitsuba scene."""
         try:
-            mi.set_variant('cuda_ad_rgb')
+            mi.set_variant('cuda_ad_mono_polarized')
             # This minimal load_string will trigger OptiX init if needed
             mi.load_string('<scene version="2.0.0"></scene>')
             return True
@@ -42,8 +42,8 @@ try:
     
     # Try CUDA+OptiX first
     if _test_optix():
-        MITSUBA_VARIANT = "cuda_ad_rgb"
-        print("🟢 Mitsuba backend: CUDA + OptiX (GPU)")
+        MITSUBA_VARIANT = "cuda_ad_mono_polarized"
+        print("🟢 Mitsuba backend: CUDA + OptiX mono-polarized (GPU)")
     else:
         print("⚠️  OptiX not available (common in WSL2)")
         mi.set_variant('llvm_ad_mono_polarized')
