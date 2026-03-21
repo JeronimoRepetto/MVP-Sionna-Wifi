@@ -48,3 +48,7 @@ internDocs/
 scenes/*.xml
 !scenes/.gitkeep
 output/
+
+# Temp
+.tmp_clone/
+*.deb
