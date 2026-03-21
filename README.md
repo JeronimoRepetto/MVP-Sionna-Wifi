@@ -19,9 +19,8 @@ This project creates a **100% virtual** simulation environment:
 1. **Blender** → Model a concrete room with ITU-standard materials
 2. **Mitsuba 3** → Export scene geometry as XML
 3. **Sionna RT** → Run differentiable ray tracing (SBR algorithm) at 2.437 GHz
-4. **Three.js** → Visualize the room, sensors, ray paths, and signal coverage in real time
-
-No physical hardware required. No SMPL body model (yet).
+4. **SMPL/SMPLX** → Generate realistic 6,890-vertex human body meshes as dynamic RF obstacles
+5. **Three.js** → Visualize the room, sensors, ray paths, human models, and signal coverage in real time
 
 ## Room Configuration
 
@@ -54,6 +53,17 @@ No physical hardware required. No SMPL body model (yet).
    Signal penetrates through walls via refraction
 ```
 
+## SMPL Human Body Integration
+
+The simulation includes a realistic **SMPL human body model** (6,890 vertices) injected as an RF obstacle into the Sionna RT scene. The human body is modeled with `itu_wet_ground` dielectric properties (high permittivity ≈ water), closely approximating the electromagnetic behavior of living tissue at 2.4 GHz.
+
+![SMPL model inside the simulation room](docs/images/smpl_preview.png)
+
+When the **Human Obstacle** toggle is enabled, the SMPL mesh is dynamically injected into the Mitsuba scene XML and the ray tracing engine recalculates all propagation paths — including absorption, reflection, and diffraction around the human body.
+
+![Ray tracing with SMPL obstacle active](docs/images/smpl_rays.png)
+![Heatmap coverage changes with human present](docs/images/smpl_heatmap.png)
+
 ## Architecture
 
 ```
@@ -73,6 +83,7 @@ MVP-Sionna-Wifi/
 │   ├── config.py             # Physical parameters & sensor positions
 │   ├── scene_loader.py       # Load XML into Sionna RT
 │   ├── simulation.py         # Ray tracing engine (SBR)
+│   ├── smpl_manager.py       # SMPL human model generation (smplx + trimesh)
 │   ├── main.py               # FastAPI server
 │   └── requirements.txt
 ├── frontend/
@@ -81,6 +92,7 @@ MVP-Sionna-Wifi/
 │   │   ├── scene3d.js        # Three.js room renderer
 │   │   ├── rays.js           # Ray path visualization
 │   │   ├── sensors.js        # Tx/Rx markers
+│   │   ├── human.js          # SMPL human model loader & positioning
 │   │   ├── heatmap.js        # Coverage overlay
 │   │   ├── controls.js       # UI panel
 │   │   └── websocket.js      # WS client
@@ -140,6 +152,10 @@ numpy
 fastapi
 uvicorn
 websockets
+smplx
+torch
+trimesh
+chumpy  # Install with: pip install --no-build-isolation chumpy
 ```
 
 ## Setup & Installation (Windows / WSL2)
@@ -187,11 +203,11 @@ python main.py
 
 Check the console for the active backend:
 
-| Log Message | Meaning |
-|-------------|--------|
-| `🟢 Mitsuba backend: CUDA + OptiX (GPU)` | Full GPU acceleration |
-| `🟡 Mitsuba backend: LLVM (CPU)` | CPU fallback (OptiX not configured) |
-| `⚠️ Sionna/Mitsuba not installed` | Mock mode (install dependencies) |
+| Log Message                              | Meaning                             |
+| ---------------------------------------- | ----------------------------------- |
+| `🟢 Mitsuba backend: CUDA + OptiX (GPU)` | Full GPU acceleration               |
+| `🟡 Mitsuba backend: LLVM (CPU)`         | CPU fallback (OptiX not configured) |
+| `⚠️ Sionna/Mitsuba not installed`        | Mock mode (install dependencies)    |
 
 **6. Start Frontend (Windows PowerShell)**
 
@@ -205,13 +221,13 @@ Open `http://localhost:5173` in your browser.
 
 ## Roadmap
 
-| Version  | Description                                 |
-| :------: | ------------------------------------------- |
-| **v0.1** | ← Current: Room + Sionna RT + Visualization |
-|   v0.2   | Add SMPL body model as obstacle             |
-|   v0.3   | Animated human movement + dynamic CSI       |
-|   v0.4   | Compare simulated vs real CSI (ESP32)       |
-|   v0.5   | Full pose estimation pipeline integration   |
+| Version  | Description                               |
+| :------: | ----------------------------------------- |
+|   v0.1   | Room + Sionna RT + Visualization          |
+| **v0.2** | ← Current: SMPL body model as obstacle    |
+|   v0.3   | Animated human movement + dynamic CSI     |
+|   v0.4   | Compare simulated vs real CSI (ESP32)     |
+|   v0.5   | Full pose estimation pipeline integration |
 
 ## Related Projects
 

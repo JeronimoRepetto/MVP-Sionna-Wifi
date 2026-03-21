@@ -10,6 +10,7 @@ import { createRoom, getRoomDimensions } from './scene3d.js';
 import { createSensors, updateSensorAnimations, setActiveReceiver } from './sensors.js';
 import { createRays, updateRayAnimations, clearRays, setRaysVisible } from './rays.js';
 import { createHeatmap, setHeatmapVisible } from './heatmap.js';
+import { createHuman } from './human.js';
 import { initControls, populateReceiverList, updateConnectionStatus, 
          showProgress, resetSimulateButton, setSimulationResult, runNextLiveSimulation, setControlsSceneInfo } from './controls.js';
 import { initWebSocket, sendMessage } from './websocket.js';
@@ -137,6 +138,9 @@ function setupScene(info) {
     
     // Create sensors
     createSensors(scene, info, roomOffset);
+    
+    // Create human placeholder
+    createHuman(scene, roomOffset);
     
     // Populate receiver list in UI
     populateReceiverList(info.receivers);
