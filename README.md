@@ -2,7 +2,7 @@
 
 #An end-to-end 3D Digital Twin built for real-time visualization of Wi-Fi (802.11) radio propagation, using NVIDIA Sionna's ray tracing engine and Three.js.
 ![Sistem preview](docs/images/preview.png)
-![Volumetric Heatmap & Ray Tracing](docs/images/previewActive2.png)
+![Volumetric Heatmap & Ray Tracing](docs/images/previewSimActive2.png)
 ![CSI Monitor & Receiver Analytics](docs/images/previewESP32.png)
 
 A virtual test room with **8 ESP32-S3 receivers** and **1 WiFi router** — built as a learning project to explore ray-tracing-based RF simulation before tackling the full [WiFi Vision 3D](https://github.com/JeronimoRepetto/wifi-csi-capture) research pipeline.
