@@ -20,30 +20,6 @@ const humanMaterial = new THREE.MeshPhysicalMaterial({
     side: THREE.DoubleSide
 });
 
-function createPlaceholder(group) {
-    const geometry = new THREE.CapsuleGeometry(0.3, 1.2, 4, 16);
-    const material = new THREE.MeshPhysicalMaterial({
-        color: 0x4ade80,
-        transparent: true,
-        opacity: 0.6,
-        roughness: 0.2,
-        metalness: 0.1,
-        side: THREE.DoubleSide
-    });
-    const body = new THREE.Mesh(geometry, material);
-    body.position.set(0, 0, 0.9);
-    body.rotation.x = Math.PI / 2;
-    
-    // Add edges for better visibility
-    const edges = new THREE.EdgesGeometry(geometry);
-    const line = new THREE.LineSegments(
-        edges, 
-        new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 })
-    );
-    body.add(line);
-    group.add(body);
-}
-
 function loadObjIntoGroup(group, objUrl) {
     const loader = new OBJLoader();
     
@@ -74,8 +50,8 @@ function loadObjIntoGroup(group, objUrl) {
         },
         () => {},
         (error) => {
-            console.warn(`⚠️ Could not load ${objUrl}. Using capsule placeholder.`);
-            createPlaceholder(group);
+            console.warn(`⚠️ Could not load ${objUrl}:`, error);
+            // No fallback placeholder — only show real SMPL mesh
         }
     );
 }

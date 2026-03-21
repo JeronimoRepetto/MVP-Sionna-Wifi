@@ -119,15 +119,23 @@ def test_walk_sequence_frame_structure():
         assert 'transl' in frame
         assert 'global_orient' in frame
         assert 'display_position' in frame
+        assert 'sionna_position' in frame
         assert len(frame['body_pose']) == 69
         assert len(frame['transl']) == 3
         assert len(frame['global_orient']) == 3
         assert len(frame['display_position']) == 3
+        assert len(frame['sionna_position']) == 3
         # transl should be [0,0,0] — no position baked into mesh
         assert frame['transl'] == [0.0, 0.0, 0.0], f"Frame {i}: transl should be [0,0,0]"
         # display_position Z should be pelvis height
         assert frame['display_position'][2] == 1.0, f"Frame {i}: display Z should be 1.0"
-    print("  ✅ All frames have correct structure (transl=[0,0,0], display_position Z=1.0)")
+        # sionna_position should be Y-up swap: [x, z_height, y_depth]
+        dp = frame['display_position']
+        sp = frame['sionna_position']
+        assert sp[0] == dp[0], f"Frame {i}: sionna X should match display X"
+        assert sp[1] == dp[2], f"Frame {i}: sionna Y should be display Z (height)"
+        assert sp[2] == dp[1], f"Frame {i}: sionna Z should be display Y (depth)"
+    print("  ✅ All frames have correct structure (transl=[0,0,0], sionna_position matches)")
 
 
 def test_walk_sequence_stays_in_room():

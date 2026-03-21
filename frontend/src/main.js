@@ -193,8 +193,8 @@ function onWebSocketMessage(data) {
         return;
     }
     
-    // Route animation messages
-    if (data.status && data.status.startsWith('animation_')) {
+    // Route animation and sim-walk messages
+    if (data.status && (data.status.startsWith('animation_') || data.status.startsWith('sim_walk_'))) {
         handleAnimationMessage(data);
         return;
     }

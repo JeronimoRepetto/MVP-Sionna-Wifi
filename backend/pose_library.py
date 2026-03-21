@@ -246,18 +246,16 @@ def generate_walk_sequence(num_frames, depth_start=0.5, depth_end=3.0, x_pos=1.0
     
     The human walks in a rectangle inside the room. Each frame contains:
       - body_pose: interpolated walking keyframes
-      - transl: position in Three.js/SMPL coords (Y-up) 
-      - global_orient: facing direction (rotation around Y axis)
+      - transl: [0,0,0] — NO position baked into mesh vertices
+      - global_orient: facing direction
+      - display_position: Three.js Z-up coords [x, y_depth, z_height]
+      - sionna_position: SMPL Y-up coords [x, z_height, y_depth] for Sionna sim
     
     Args:
         num_frames: Total number of animation frames (minimum 2)
     
     Returns:
-        List of dicts with keys:
-          - body_pose: 69 joint angles
-          - transl: [0,0,0] — NO position baked into mesh vertices
-          - global_orient: Y-axis rotation for facing direction
-          - display_position: Three.js position [x, y_height, z_depth]
+        List of frame dicts
     """
     num_frames = max(num_frames, 2)
     
@@ -277,11 +275,14 @@ def generate_walk_sequence(num_frames, depth_start=0.5, depth_end=3.0, x_pos=1.0
         
         body_pose = interpolate_poses(cycle_kfs[kf_idx], cycle_kfs[kf_idx + 1], kf_frac)
         
+        pos = positions[i]  # [x, y_depth, z_height] Three.js Z-up
+        
         sequence.append({
             'body_pose': body_pose,
             'transl': [0.0, 0.0, 0.0],  # No position in mesh — prevents double-apply
             'global_orient': [0.0, rotations[i], 0.0],
-            'display_position': positions[i],  # Three.js coords [x, y_height, z_depth]
+            'display_position': pos,  # Three.js Z-up [x, y_depth, z_height]
+            'sionna_position': [pos[0], pos[2], pos[1]],  # SMPL Y-up [x, z_height, y_depth]
         })
     
     return sequence

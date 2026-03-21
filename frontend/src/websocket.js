@@ -99,3 +99,20 @@ export function stopAnimationWs() {
 export function isConnected() {
     return ws && ws.readyState === WebSocket.OPEN;
 }
+
+// Synchronized walk simulation (frame-by-frame with Sionna)
+export function requestSimWalk(params = {}) {
+    return sendMessage({ action: 'sim_walk', params });
+}
+
+export function pauseSimWalk() {
+    return sendMessage({ action: 'pause_sim_walk' });
+}
+
+export function resumeSimWalk() {
+    return sendMessage({ action: 'resume_sim_walk' });
+}
+
+export function stopSimWalk() {
+    return sendMessage({ action: 'stop_sim_walk' });
+}
