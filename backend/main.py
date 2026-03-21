@@ -16,10 +16,21 @@ from fastapi.staticfiles import StaticFiles
 from config import API_HOST, API_PORT
 from scene_loader import load_scene, get_scene_info, MITSUBA_VARIANT
 from simulation import run_simulation
+import os
+import secrets
+
+# Try to load the SMPL manager
+try:
+    from smpl_manager import SMPLManager
+    smpl_manager = SMPLManager()
+except ImportError:
+    print("⚠️ SMPL Manager not available. Install smplx, torch, trimesh.")
+    smpl_manager = None
 
 # Global scene (loaded once at startup)
 scene = None
 last_simulation_result = None
+human_currently_in_scene = False
 
 
 @asynccontextmanager
@@ -27,6 +38,18 @@ async def lifespan(app):
     """Load the scene at server startup, clean up on shutdown."""
     global scene
     try:
+        if smpl_manager is not None:
+            try:
+                frontend_public = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "public"))
+                os.makedirs(frontend_public, exist_ok=True)
+                human_obj_path = os.path.join(frontend_public, "human.obj")
+                # Generate if missing or if we just want to ensure it's there
+                if not os.path.exists(human_obj_path):
+                    print("🏃 Generating static human.obj for frontend...")
+                    smpl_manager.save_obj(human_obj_path)
+            except Exception as e:
+                print(f"⚠️ Could not generate static frontend human.obj: {e}")
+
         scene = load_scene()
         # Check what we actually got
         if isinstance(scene, dict) and scene.get("type") == "mock":
@@ -138,7 +161,43 @@ async def websocket_simulation(websocket: WebSocket):
                     "progress": 0.3,
                     "message": "Computing ray paths...",
                 })
+                global scene, human_currently_in_scene
+                smpl_params = params.get("smpl_params", None)
                 
+                if smpl_params is not None and smpl_manager is not None:
+                    await websocket.send_json({
+                        "status": "running",
+                        "progress": 0.05,
+                        "message": "Generating human mesh...",
+                    })
+                    # Use absolute paths or fixed relative temp path
+                    os.makedirs("output", exist_ok=True)
+                    temp_obj = f"output/temp_human_{secrets.token_hex(4)}.obj"
+                    try:
+                        smpl_manager.save_obj(
+                            temp_obj, 
+                            betas=smpl_params.get("betas"),
+                            body_pose=smpl_params.get("body_pose"),
+                            global_orient=smpl_params.get("global_orient"),
+                            transl=smpl_params.get("transl")
+                        )
+                        # Reload the scene with the new mesh
+                        scene = load_scene(human_mesh_path=temp_obj)
+                        human_currently_in_scene = True
+                    except Exception as e:
+                        print(f"❌ Failed to generate or load human: {e}")
+                    finally:
+                        if os.path.exists(temp_obj):
+                            try:
+                                os.remove(temp_obj)
+                            except:
+                                pass
+                else:
+                    # If we had a human but now we don't, load base scene
+                    if human_currently_in_scene:
+                        scene = load_scene()
+                        human_currently_in_scene = False
+
                 # Run simulation
                 result = run_simulation(
                     scene,

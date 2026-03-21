@@ -69,12 +69,13 @@ SCENE_PATH = os.path.join(
 )
 
 
-def load_scene(scene_path=None):
+def load_scene(scene_path=None, human_mesh_path=None):
     """
     Load the Mitsuba XML scene into Sionna RT.
     
     Args:
         scene_path: Path to .xml file. Defaults to scenes/room_simple.xml
+        human_mesh_path: Optional path to an .obj file for a human obstacle
         
     Returns:
         scene: Sionna RT Scene object (or mock dict if Sionna not available)
@@ -84,9 +85,49 @@ def load_scene(scene_path=None):
     
     if not HAS_SIONNA:
         return _create_mock_scene()
+        
+    actual_scene_path = scene_path
+    temp_path = None
+    
+    # Inject human mesh into XML
+    if human_mesh_path and os.path.exists(human_mesh_path):
+        import xml.etree.ElementTree as ET
+        import tempfile
+        try:
+            tree = ET.parse(scene_path)
+            root = tree.getroot()
+            
+            # Para que Mitsuba no falle por 'unresolved reference', inyectamos una definición
+            # básica de 'itu_wet_ground' (material cercano biológicamente por su alta permitividad (agua)).
+            # Sionna reemplazará las propiedades visuales por sus propiedades de Radio ITU reales.
+            wet_mat = ET.Element("bsdf", type="twosided", id="itu_wet_ground")
+            wet_diffuse = ET.SubElement(wet_mat, "bsdf", type="diffuse")
+            ET.SubElement(wet_diffuse, "rgb", name="reflectance", value="0.2, 0.4, 0.8")
+            root.insert(0, wet_mat)
+            
+            human_shape = ET.Element("shape", type="obj", id="Human_SMPL_Sionna")
+            ET.SubElement(human_shape, "string", name="filename", value=human_mesh_path)
+            ET.SubElement(human_shape, "ref", id="itu_wet_ground", name="bsdf")
+            
+            root.append(human_shape)
+            temp_fd, temp_path = tempfile.mkstemp(suffix='.xml')
+            with os.fdopen(temp_fd, 'wb') as f:
+                tree.write(f)
+            
+            actual_scene_path = temp_path
+            print(f"✅ Injected human mesh '{human_mesh_path}' into temporary XML.")
+        except Exception as e:
+            print(f"❌ Failed to inject human mesh: {e}")
     
     # Load scene — variant was already validated at import time
-    scene = rt.load_scene(scene_path, merge_shapes=False)
+    scene = rt.load_scene(actual_scene_path, merge_shapes=False)
+    
+    # Cleanup temporary XML
+    if temp_path and os.path.exists(temp_path):
+        try:
+            os.remove(temp_path)
+        except:
+            pass
     
     # Set operating frequency
     scene.frequency = WIFI_FREQUENCY
