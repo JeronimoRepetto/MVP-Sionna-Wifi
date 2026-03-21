@@ -64,6 +64,14 @@ When the **Human Obstacle** toggle is enabled, the SMPL mesh is dynamically inje
 ![Ray tracing with SMPL obstacle active](docs/images/smpl_rays.png)
 ![Heatmap coverage changes with human present](docs/images/smpl_heatmap.png)
 
+### Walking Animation
+
+The **Play Walk** animation system moves the human model across the room while running a Sionna RT simulation per frame. This lets you observe how human movement affects WiFi signal propagation, ESP32 readings, and heatmap coverage in real-time. Controls include:
+- **Play/Pause** button to start/stop the walk animation
+- **Speed** slider (0.5x–2.0x)
+- **Frames** slider (8–32 frames per walk cycle)
+- **Frame counter** showing current progress
+
 ## Architecture
 
 ```
@@ -84,6 +92,7 @@ MVP-Sionna-Wifi/
 │   ├── scene_loader.py       # Load XML into Sionna RT
 │   ├── simulation.py         # Ray tracing engine (SBR)
 │   ├── smpl_manager.py       # SMPL human model generation (smplx + trimesh)
+│   ├── pose_library.py       # Walking keyframes & animation sequence generation
 │   ├── main.py               # FastAPI server
 │   └── requirements.txt
 ├── frontend/
@@ -224,8 +233,8 @@ Open `http://localhost:5173` in your browser.
 | Version  | Description                               |
 | :------: | ----------------------------------------- |
 |   v0.1   | Room + Sionna RT + Visualization          |
-| **v0.2** | ← Current: SMPL body model as obstacle    |
-|   v0.3   | Animated human movement + dynamic CSI     |
+|   v0.2   | SMPL body model as obstacle               |
+| **v0.3** | ← Current: Animated human movement + CSI  |
 |   v0.4   | Compare simulated vs real CSI (ESP32)     |
 |   v0.5   | Full pose estimation pipeline integration |
 

@@ -106,6 +106,34 @@
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
+                    <!-- Animation Controls (visible when Human Obstacle is ON) -->
+                    <div id="animation-controls" class="animation-controls" style="display: none;">
+                        <div class="param-group" style="flex-direction: column; gap: 0.5rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                                <button id="btn-animate" class="btn btn-secondary btn-sm">
+                                    <span class="btn-icon">▶</span> Play Walk
+                                </button>
+                                <span id="anim-frame-counter" class="anim-frame-counter">—</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                                <label style="font-size: 0.75rem; opacity: 0.7;">Speed</label>
+                                <div class="slider-row" style="flex: 1; margin-left: 0.5rem;">
+                                    <input type="range" id="anim-speed" min="0.5" max="2.0" value="1.0" step="0.25" style="flex: 1;">
+                                    <span id="anim-speed-val" class="slider-val">1.0x</span>
+                                </div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                                <label style="font-size: 0.75rem; opacity: 0.7;">Frames</label>
+                                <div class="slider-row" style="flex: 1; margin-left: 0.5rem;">
+                                    <input type="range" id="anim-frames" min="8" max="32" value="16" step="4" style="flex: 1;">
+                                    <span id="anim-frames-val" class="slider-val">16</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="anim-progress-bar" class="anim-progress hidden">
+                            <div class="anim-progress-fill"></div>
+                        </div>
+                    </div>
                     <div class="param-group toggle-group">
                         <label>Show Rays</label>
                         <label class="toggle">

@@ -83,6 +83,19 @@ export function requestSimulation(params = {}) {
     });
 }
 
+export function requestAnimation(params = {}) {
+    return sendMessage({
+        action: 'animate',
+        params: params,
+    });
+}
+
+export function stopAnimationWs() {
+    return sendMessage({
+        action: 'stop_animation',
+    });
+}
+
 export function isConnected() {
     return ws && ws.readyState === WebSocket.OPEN;
 }

@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from config import API_HOST, API_PORT
 from scene_loader import load_scene, get_scene_info, MITSUBA_VARIANT
@@ -32,6 +33,12 @@ scene = None
 last_simulation_result = None
 human_currently_in_scene = False
 
+# Animation state
+animation_frames_dir = None
+animation_sequence = None
+is_animating = False
+animation_task = None  # asyncio.Task for current animation
+
 
 @asynccontextmanager
 async def lifespan(app):
@@ -46,7 +53,7 @@ async def lifespan(app):
                 # Generate if missing or if we just want to ensure it's there
                 if not os.path.exists(human_obj_path):
                     print("🏃 Generating static human.obj for frontend...")
-                    smpl_manager.save_obj(human_obj_path)
+                    smpl_manager.save_obj(human_obj_path, for_sionna=False)
             except Exception as e:
                 print(f"⚠️ Could not generate static frontend human.obj: {e}")
 
@@ -226,6 +233,25 @@ async def websocket_simulation(websocket: WebSocket):
                     "result": result,
                 })
                 
+            elif message.get("action") == "animate":
+                # Run animation as background task so WebSocket stays responsive
+                global animation_task
+                if animation_task and not animation_task.done():
+                    animation_task.cancel()
+                is_animating = False  # Reset before starting new
+                animation_task = asyncio.create_task(
+                    handle_animation(websocket, message.get("params", {}))
+                )
+                
+            elif message.get("action") == "stop_animation":
+                is_animating = False
+                if animation_task and not animation_task.done():
+                    animation_task.cancel()
+                await websocket.send_json({
+                    "status": "animation_stopped",
+                    "message": "Animation stopped by user.",
+                })
+                
             elif message.get("action") == "get_scene":
                 info = get_scene_info(scene)
                 await websocket.send_json({
@@ -248,6 +274,110 @@ async def websocket_simulation(websocket: WebSocket):
             })
         except:
             pass
+
+
+async def handle_animation(websocket: WebSocket, params: dict):
+    """
+    Handle walking animation: generate all frame meshes and send URLs.
+    NO simulation is run — animation is purely visual on the frontend.
+    The frontend loops through frames locally.
+    """
+    global is_animating, animation_frames_dir, animation_sequence
+    
+    if smpl_manager is None:
+        await websocket.send_json({
+            "status": "error",
+            "message": "SMPL Manager not available. Cannot animate.",
+        })
+        return
+    
+    num_frames = params.get("num_frames", 16)
+    
+    is_animating = True
+    
+    await websocket.send_json({
+        "status": "animation_start",
+        "total_frames": num_frames,
+        "message": f"Generating {num_frames} walk frames...",
+    })
+    
+    # Generate all frame meshes upfront
+    anim_dir = os.path.abspath(os.path.join("output", f"anim_{secrets.token_hex(4)}"))
+    try:
+        obj_paths, sequence = smpl_manager.save_walk_sequence_objs(
+            anim_dir, num_frames=num_frames
+        )
+        animation_frames_dir = anim_dir
+        animation_sequence = sequence
+    except Exception as e:
+        print(f"❌ Failed to generate walk sequence: {e}")
+        is_animating = False
+        await websocket.send_json({
+            "status": "error",
+            "message": f"Failed to generate walk meshes: {e}",
+        })
+        return
+    
+    # Build frame list with URLs and positions for the frontend
+    frames = []
+    for i, frame_data in enumerate(sequence):
+        frames.append({
+            "frame_index": i,
+            "obj_url": f"/api/animation_frame/{i}",
+            "position": frame_data.get('display_position', frame_data['transl']),
+        })
+    
+    # Send all frame data at once — frontend handles the loop
+    await websocket.send_json({
+        "status": "animation_ready",
+        "total_frames": num_frames,
+        "frames": frames,
+        "message": f"Generated {num_frames} frames. Animation starting...",
+    })
+    
+    # Cleanup after 10 minutes (frontend loops, needs files for a while)
+    asyncio.get_event_loop().call_later(600, _cleanup_animation_dir, anim_dir)
+    
+    # Mark animation as complete on backend so it can be restarted
+    is_animating = False
+
+
+def _cleanup_animation_dir(dir_path):
+    """Remove animation frame files after a delay."""
+    import shutil
+    try:
+        if os.path.exists(dir_path):
+            shutil.rmtree(dir_path)
+            print(f"🧹 Cleaned up animation frames: {dir_path}")
+    except Exception as e:
+        print(f"⚠️ Could not clean animation dir: {e}")
+
+
+@app.get("/api/animation_frame/{frame_id}")
+async def get_animation_frame(frame_id: int):
+    """Serve a generated animation frame .obj file."""
+    if animation_frames_dir is None:
+        return {"error": "No animation frames available"}
+    
+    obj_path = os.path.join(animation_frames_dir, f"frame_{frame_id:04d}.obj")
+    if not os.path.exists(obj_path):
+        return {"error": f"Frame {frame_id} not found"}
+    
+    return FileResponse(
+        obj_path,
+        media_type="text/plain",
+        filename=f"frame_{frame_id:04d}.obj"
+    )
+
+
+@app.get("/api/animation_info")
+async def get_animation_info():
+    """Get current animation state."""
+    return {
+        "is_animating": is_animating,
+        "has_frames": animation_frames_dir is not None,
+        "sequence": animation_sequence if animation_sequence else [],
+    }
 
 
 if __name__ == "__main__":

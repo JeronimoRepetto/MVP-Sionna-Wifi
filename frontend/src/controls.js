@@ -1,14 +1,16 @@
 /**
  * MVP-Sionna-WiFi: UI Controls
- * Manages panel interactions, parameter changes, and receiver selection.
+ * Manages panel interactions, parameter changes, receiver selection, and animation.
  */
 
-import { requestSimulation, isConnected } from './websocket.js';
+import { requestSimulation, requestAnimation, stopAnimationWs, isConnected } from './websocket.js';
 import { filterRaysByReceiver, setRaysVisible } from './rays.js';
 import { setHeatmapVisible, setHeatmapHeight } from './heatmap.js';
 import { setActiveReceiver } from './sensors.js';
 import { initCSIPanel, openCSI, closeCSI } from './csi_panel.js';
-import { setHumanVisible, getSmplParams } from './human.js';
+import { setHumanVisible, getSmplParams, updateHumanMesh, setHumanPosition,
+         startAnimation as startHumanAnim, stopAnimation as stopHumanAnim,
+         setAnimationFrame, getAnimationState } from './human.js';
 
 let lastSimResult = null;
 let currentSceneInfo = null;
@@ -20,6 +22,9 @@ export function setControlsSceneInfo(info) {
 let selectedReceiver = 'all';
 let onSimulateCallback = null;
 let isLiveSimulation = false;
+
+// Animation state
+let isWalkAnimating = false;
 
 export function runNextLiveSimulation() {
     if (isLiveSimulation && isConnected()) {
@@ -39,13 +44,14 @@ export function initControls(onSimulate) {
     setupSimulationButton();
     setupParameterSliders();
     setupDisplayToggles();
+    setupAnimationControls();
 }
 
 function setupSimulationButton() {
     const btn = document.getElementById('btn-simulate');
     btn.addEventListener('click', () => {
         if (isLiveSimulation) {
-            // Stop
+            // Stop live sim only (animation continues independently)
             isLiveSimulation = false;
             resetSimulateButton();
             showProgress(1, 'Simulation stopped.');
@@ -53,10 +59,11 @@ function setupSimulationButton() {
         }
 
         if (!isConnected()) {
-            // Fallback: use REST API
             runSimulationREST();
             return;
         }
+        
+        // Animation is visual-only, no need to stop it when starting sim
         
         isLiveSimulation = true;
         btn.classList.add('running');
@@ -134,6 +141,15 @@ function setupDisplayToggles() {
     // Human Obstacle
     document.getElementById('toggle-human').addEventListener('change', (e) => {
         setHumanVisible(e.target.checked);
+        // Show/hide animation controls
+        const animControls = document.getElementById('animation-controls');
+        if (animControls) {
+            animControls.style.display = e.target.checked ? 'block' : 'none';
+        }
+        // Stop animation if human is disabled
+        if (!e.target.checked && isWalkAnimating) {
+            handleStopAnimation();
+        }
     });
 
     // Show rays
@@ -156,6 +172,170 @@ function setupDisplayToggles() {
         heatmapVal.textContent = parseFloat(heatmapSlider.value).toFixed(2);
         setHeatmapHeight(parseFloat(heatmapSlider.value));
     });
+}
+
+// =============================================================================
+// Animation Controls
+// =============================================================================
+
+function setupAnimationControls() {
+    const animBtn = document.getElementById('btn-animate');
+    if (!animBtn) return;
+    
+    animBtn.addEventListener('click', () => {
+        if (isWalkAnimating) {
+            handleStopAnimation();
+        } else {
+            handleStartAnimation();
+        }
+    });
+    
+    // Speed slider
+    const speedSlider = document.getElementById('anim-speed');
+    const speedVal = document.getElementById('anim-speed-val');
+    if (speedSlider) {
+        speedSlider.addEventListener('input', () => {
+            speedVal.textContent = `${parseFloat(speedSlider.value).toFixed(1)}x`;
+        });
+    }
+    
+    // Frames slider
+    const framesSlider = document.getElementById('anim-frames');
+    const framesVal = document.getElementById('anim-frames-val');
+    if (framesSlider) {
+        framesSlider.addEventListener('input', () => {
+            framesVal.textContent = framesSlider.value;
+        });
+    }
+}
+
+function handleStartAnimation() {
+    if (!isConnected()) {
+        showProgress(0, 'Cannot animate: not connected to backend.');
+        return;
+    }
+    
+    // Animation is visual-only — doesn't interfere with Live Sim
+    
+    isWalkAnimating = true;
+    const btn = document.getElementById('btn-animate');
+    btn.classList.add('animating');
+    btn.innerHTML = '<span class="btn-icon">⏸</span> Stop Walk';
+    
+    const numFrames = parseInt(document.getElementById('anim-frames')?.value || '16');
+    
+    startHumanAnim(numFrames);
+    
+    // Show animation progress bar
+    const progBar = document.getElementById('anim-progress-bar');
+    if (progBar) progBar.classList.remove('hidden');
+    
+    // Send animation request — backend generates meshes only, no simulation
+    requestAnimation({
+        num_frames: numFrames,
+    });
+    
+    showProgress(0.05, 'Generating walk frames...');
+}
+
+// Animation loop state
+let animFrames = null;     // Array of { obj_url, position } from backend
+let animLoopTimer = null;  // setInterval ID
+let animCurrentIdx = 0;    // Current frame index in the loop
+
+function startAnimationLoop(frames) {
+    animFrames = frames;
+    animCurrentIdx = 0;
+    
+    const speed = parseFloat(document.getElementById('anim-speed')?.value || '1.0');
+    const intervalMs = Math.max(50, Math.round(200 / speed));  // ~5 FPS at 1x speed
+    
+    // Clear any previous loop
+    if (animLoopTimer) clearInterval(animLoopTimer);
+    
+    animLoopTimer = setInterval(() => {
+        if (!isWalkAnimating || !animFrames) {
+            clearInterval(animLoopTimer);
+            animLoopTimer = null;
+            return;
+        }
+        
+        const frame = animFrames[animCurrentIdx];
+        
+        // Update mesh and position
+        updateHumanMesh(`${frame.obj_url}?t=${Date.now()}`);
+        if (frame.position) {
+            setHumanPosition(frame.position[0], frame.position[1], frame.position[2]);
+        }
+        setAnimationFrame(animCurrentIdx, animFrames.length);
+        
+        // Update UI
+        const counter = document.getElementById('anim-frame-counter');
+        if (counter) counter.textContent = `${animCurrentIdx + 1}/${animFrames.length}`;
+        
+        const progFill = document.querySelector('.anim-progress-fill');
+        if (progFill) progFill.style.width = `${((animCurrentIdx + 1) / animFrames.length) * 100}%`;
+        
+        // Loop back to start
+        animCurrentIdx = (animCurrentIdx + 1) % animFrames.length;
+        
+    }, intervalMs);
+}
+
+function handleStopAnimation() {
+    isWalkAnimating = false;
+    
+    // Stop the frontend loop
+    if (animLoopTimer) {
+        clearInterval(animLoopTimer);
+        animLoopTimer = null;
+    }
+    animFrames = null;
+    animCurrentIdx = 0;
+    
+    stopHumanAnim();
+    // Don't send stop_animation to backend here — it creates a race condition
+    // where the backend's 'animation_stopped' response kills a newly started animation.
+    
+    const btn = document.getElementById('btn-animate');
+    btn.classList.remove('animating');
+    btn.innerHTML = '<span class="btn-icon">▶</span> Play Walk';
+    
+    const counter = document.getElementById('anim-frame-counter');
+    if (counter) counter.textContent = '—';
+    
+    const progBar = document.getElementById('anim-progress-bar');
+    if (progBar) progBar.classList.add('hidden');
+    
+    showProgress(1, 'Animation stopped.');
+}
+
+/**
+ * Handle incoming animation WebSocket messages.
+ * Called from main.js onWebSocketMessage.
+ */
+export function handleAnimationMessage(data) {
+    switch (data.status) {
+        case 'animation_start':
+            showProgress(0.1, data.message);
+            break;
+            
+        case 'animation_ready':
+            // Backend sent all frame URLs — start frontend loop
+            if (data.frames && data.frames.length > 0) {
+                showProgress(1, `${data.frames.length} frames ready. Playing...`);
+                startAnimationLoop(data.frames);
+            }
+            break;
+            
+        case 'animation_stopped':
+            // Only stop if we're still in animating state
+            // (prevents race condition when user quickly presses Stop then Play)
+            if (isWalkAnimating) {
+                handleStopAnimation();
+            }
+            break;
+    }
 }
 
 export function populateReceiverList(receivers) {
@@ -217,7 +397,7 @@ function selectReceiver(name, container) {
                     csiData = lastSimResult.csi.find(c => c.receiver === name);
                 }
                 
-                // Calculamos RSSI desde los paths
+                // Calculate RSSI from paths
                 if (lastSimResult.paths && lastSimResult.paths[name]) {
                     let totalPowerLin = 0;
                     lastSimResult.paths[name].forEach(p => totalPowerLin += p.power_lin);
@@ -227,7 +407,6 @@ function selectReceiver(name, container) {
                 }
             }
             
-            // Si no hay datos (aún no se simuló), pasamos null y se pondrá en waiting o ruido por defecto
             openCSI(name, csiData, rssi);
         }
     }

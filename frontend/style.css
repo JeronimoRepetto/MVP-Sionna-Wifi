@@ -749,3 +749,89 @@ html, body {
     font-family: 'JetBrains Mono', monospace;
     text-align: left;
 }
+
+/* =============================================================================
+   Animation Controls
+   ============================================================================= */
+
+.animation-controls {
+    margin-top: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: rgba(118, 185, 0, 0.05);
+    border: 1px solid rgba(118, 185, 0, 0.15);
+    border-radius: var(--radius-sm);
+    animation: fade-in 0.3s ease forwards;
+}
+
+.btn-secondary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    padding: 6px 14px;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--accent);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.btn-secondary:hover {
+    background: rgba(118, 185, 0, 0.1);
+    box-shadow: 0 0 12px var(--accent-glow);
+}
+
+.btn-secondary.animating {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: var(--accent-red);
+    color: var(--accent-red);
+    animation: border-pulse-red 1.5s infinite;
+}
+
+@keyframes border-pulse-red {
+    0%, 100% { border-color: var(--accent-red); }
+    50% { border-color: rgba(239, 68, 68, 0.4); }
+}
+
+.btn-sm {
+    padding: 5px 12px;
+    font-size: 11px;
+}
+
+.anim-frame-counter {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+    background: var(--bg-tertiary);
+    padding: 3px 8px;
+    border-radius: 4px;
+    min-width: 60px;
+    text-align: center;
+}
+
+.anim-progress {
+    margin-top: var(--space-sm);
+    height: 3px;
+    background: var(--bg-tertiary);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.anim-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--gradient-accent);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.anim-progress.hidden {
+    display: none;
+}
+
