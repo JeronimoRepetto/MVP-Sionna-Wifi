@@ -63,7 +63,6 @@ When the **Human Obstacle** toggle is enabled, the SMPL mesh is dynamically inje
 
 ![Ray tracing with SMPL obstacle active](docs/images/smpl_rays.png)
 ![Heatmap coverage changes with human present](docs/images/smpl_heatmap.png)
-![ESP32 CSI response with human obstacle](docs/images/smpl_esp32.png)
 
 ## Architecture
 
@@ -204,11 +203,11 @@ python main.py
 
 Check the console for the active backend:
 
-| Log Message | Meaning |
-|-------------|--------|
-| `🟢 Mitsuba backend: CUDA + OptiX (GPU)` | Full GPU acceleration |
-| `🟡 Mitsuba backend: LLVM (CPU)` | CPU fallback (OptiX not configured) |
-| `⚠️ Sionna/Mitsuba not installed` | Mock mode (install dependencies) |
+| Log Message                              | Meaning                             |
+| ---------------------------------------- | ----------------------------------- |
+| `🟢 Mitsuba backend: CUDA + OptiX (GPU)` | Full GPU acceleration               |
+| `🟡 Mitsuba backend: LLVM (CPU)`         | CPU fallback (OptiX not configured) |
+| `⚠️ Sionna/Mitsuba not installed`        | Mock mode (install dependencies)    |
 
 **6. Start Frontend (Windows PowerShell)**
 
@@ -222,13 +221,13 @@ Open `http://localhost:5173` in your browser.
 
 ## Roadmap
 
-| Version  | Description                                 |
-| :------: | ------------------------------------------- |
-|   v0.1   | Room + Sionna RT + Visualization            |
-| **v0.2** | ← Current: SMPL body model as obstacle      |
-|   v0.3   | Animated human movement + dynamic CSI       |
-|   v0.4   | Compare simulated vs real CSI (ESP32)       |
-|   v0.5   | Full pose estimation pipeline integration   |
+| Version  | Description                               |
+| :------: | ----------------------------------------- |
+|   v0.1   | Room + Sionna RT + Visualization          |
+| **v0.2** | ← Current: SMPL body model as obstacle    |
+|   v0.3   | Animated human movement + dynamic CSI     |
+|   v0.4   | Compare simulated vs real CSI (ESP32)     |
+|   v0.5   | Full pose estimation pipeline integration |
 
 ## Related Projects
 
