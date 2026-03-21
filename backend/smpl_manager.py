@@ -1,22 +1,26 @@
 import os
+import warnings
 import torch
 import numpy as np
 
-# Monkey-patch para retrocompatibilidad con chumpy (requerido por smplx en numpy >= 1.24)
-if not hasattr(np, 'bool'):
-    np.bool = np.bool_
-if not hasattr(np, 'int'):
-    np.int = np.int_
-if not hasattr(np, 'float'):
-    np.float = np.float64
-if not hasattr(np, 'complex'):
-    np.complex = np.complex128
-if not hasattr(np, 'object'):
-    np.object = object
-if not hasattr(np, 'unicode'):
-    np.unicode = str
-if not hasattr(np, 'str'):
-    np.str = str
+# Monkey-patch for chumpy backward compatibility (required by smplx with numpy >= 1.24)
+# Suppress FutureWarning noise from these assignments
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore", FutureWarning)
+    if not hasattr(np, 'bool'):
+        np.bool = np.bool_
+    if not hasattr(np, 'int'):
+        np.int = np.int_
+    if not hasattr(np, 'float'):
+        np.float = np.float64
+    if not hasattr(np, 'complex'):
+        np.complex = np.complex128
+    if not hasattr(np, 'object'):
+        np.object = object
+    if not hasattr(np, 'unicode'):
+        np.unicode = str
+    if not hasattr(np, 'str'):
+        np.str = str
 
 import smplx
 import trimesh
