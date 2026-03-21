@@ -53,10 +53,18 @@ def run_simulation(scene, max_depth=6, num_samples=20000,
     if not HAS_SIONNA or (isinstance(scene, dict) and scene.get("type") == "mock"):
         return _mock_simulation(max_depth, num_samples, coverage_height)
     
-    return _run_sionna_simulation(scene, max_depth, num_samples, 
-                                      diffraction, scattering, 
-                                      refraction, specular_reflection,
-                                      coverage_height)
+    try:
+        return _run_sionna_simulation(scene, max_depth, num_samples, 
+                                          diffraction, scattering, 
+                                          refraction, specular_reflection,
+                                          coverage_height)
+    except Exception as e:
+        print(f"\n❌ Sionna simulation failed: {e}")
+        print("   Falling back to mock simulation for this request")
+        result = _mock_simulation(max_depth, num_samples, coverage_height)
+        result["error"] = str(e)
+        result["fallback"] = True
+        return result
 
 
 def _run_sionna_simulation(scene, max_depth, num_samples, diffraction, scattering,

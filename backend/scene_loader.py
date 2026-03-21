@@ -7,13 +7,56 @@ transmitters, receivers, antennas, and material properties.
 import os
 import numpy as np
 
+# =============================================================================
+# Mitsuba Variant Selection (BEFORE importing Sionna)
+# =============================================================================
+# Sionna registers custom Mitsuba plugins (itu-radio-material, etc.) at import
+# time. These registrations are tied to the active variant, so we MUST choose
+# the correct variant BEFORE importing Sionna.
+#
+# Problem in WSL2: mi.set_variant('cuda_ad_rgb') succeeds (CUDA works),
+# but OptiX is NOT available, so rt.load_scene() fails later.
+# Fix: test OptiX with a trivial scene load BEFORE importing Sionna.
+# =============================================================================
+
+MITSUBA_VARIANT = "none"
+HAS_SIONNA = False
+
 try:
+    import mitsuba as mi
+    
+    def _test_optix():
+        """Test if OptiX works by loading a trivial Mitsuba scene."""
+        try:
+            mi.set_variant('cuda_ad_rgb')
+            # This minimal load_string will trigger OptiX init if needed
+            mi.load_string('<scene version="2.0.0"></scene>')
+            return True
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "optix" in error_msg:
+                return False
+            # Non-OptiX error — CUDA might still work for other things,
+            # but scene loading will fail, so fall back
+            return False
+    
+    # Try CUDA+OptiX first
+    if _test_optix():
+        MITSUBA_VARIANT = "cuda_ad_rgb"
+        print("🟢 Mitsuba backend: CUDA + OptiX (GPU)")
+    else:
+        print("⚠️  OptiX not available (common in WSL2)")
+        mi.set_variant('llvm_ad_mono_polarized')
+        MITSUBA_VARIANT = "llvm_ad_mono_polarized"
+        print("🟡 Mitsuba backend: LLVM mono-polarized (CPU)")
+    
+    # NOW import Sionna with the correct variant already active
     import sionna
     from sionna import rt
     HAS_SIONNA = True
+
 except ImportError:
-    HAS_SIONNA = False
-    print("⚠️  Sionna not installed. Running in mock mode for development.")
+    print("⚠️  Sionna/Mitsuba not installed. Running in mock mode.")
 
 from config import (
     WIFI_FREQUENCY, TRANSMITTER, RECEIVERS, ANTENNA_PATTERN,
@@ -42,7 +85,7 @@ def load_scene(scene_path=None):
     if not HAS_SIONNA:
         return _create_mock_scene()
     
-    # Load scene with merge_shapes=False to keep individual wall meshes
+    # Load scene — variant was already validated at import time
     scene = rt.load_scene(scene_path, merge_shapes=False)
     
     # Set operating frequency
@@ -55,7 +98,9 @@ def load_scene(scene_path=None):
     _add_transmitter(scene)
     _add_receivers(scene)
     
+    variant_label = "CUDA+OptiX (GPU)" if "cuda" in MITSUBA_VARIANT else "LLVM (CPU)"
     print(f"✅ Scene loaded: {scene_path}")
+    print(f"   Backend: {variant_label}")
     print(f"   Frequency: {WIFI_FREQUENCY / 1e9:.3f} GHz")
     print(f"   Objects: {len(scene.objects)}")
     print(f"   Tx: {TRANSMITTER['name']} at {TRANSMITTER['position']}")
@@ -106,8 +151,6 @@ def _add_transmitter(scene):
     tx_pos = TRANSMITTER["position"]
     tx_orient = TRANSMITTER.get("orientation", [0, 0, 0])
     
-    # In Sionna 0.19+, antenna arrays are set on the scene level
-    # scene.tx_array and scene.rx_array are shared by all Tx/Rx
     try:
         scene.tx_array = rt.PlanarArray(
             num_rows=1, num_cols=1,
@@ -117,7 +160,6 @@ def _add_transmitter(scene):
     except Exception as e:
         print(f"   ⚠️ Could not set tx_array: {e}")
     
-    # Add transmitter to scene
     tx = rt.Transmitter(
         name=TRANSMITTER["name"],
         position=tx_pos,
@@ -128,7 +170,6 @@ def _add_transmitter(scene):
 
 def _add_receivers(scene):
     """Add all 8 ESP32-S3 receivers."""
-    # In Sionna 0.19+, antenna arrays are set on the scene level
     try:
         scene.rx_array = rt.PlanarArray(
             num_rows=1, num_cols=1,
@@ -174,11 +215,10 @@ def get_scene_info(scene):
     Extract scene metadata for the frontend API.
     
     Returns:
-        dict with room geometry, sensor positions, materials
+        dict with room geometry, sensor positions, materials, backend info
     """
     from config import ROOM_WIDTH, ROOM_DEPTH, ROOM_HEIGHT
     
-    # Build receiver list for frontend
     receivers_list = []
     for name, config in RECEIVERS.items():
         receivers_list.append({
@@ -186,6 +226,14 @@ def get_scene_info(scene):
             "position": config["position"],
             "label": config["label"],
         })
+    
+    is_mock = isinstance(scene, dict) and scene.get("type") == "mock"
+    if is_mock:
+        backend = "mock"
+    elif "cuda" in MITSUBA_VARIANT:
+        backend = "cuda_optix"
+    else:
+        backend = "llvm_cpu"
     
     return {
         "room": {
@@ -202,7 +250,9 @@ def get_scene_info(scene):
         "frequency_ghz": WIFI_FREQUENCY / 1e9,
         "bandwidth_mhz": 40,
         "num_subcarriers": 114,
-        "sionna_active": HAS_SIONNA,
+        "sionna_active": HAS_SIONNA and not is_mock,
+        "backend": backend,
+        "mitsuba_variant": MITSUBA_VARIANT,
     }
 
 

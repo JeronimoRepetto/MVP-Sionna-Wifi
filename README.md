@@ -1,7 +1,8 @@
 # MVP-Sionna-WiFi
-#An end-to-end 3D Digital Twin built for real-time visualization of Wi-Fi (802.11) radio propagation, using NVIDIA Sionna's ray tracing engine and Three.js.
 
-![Volumetric Heatmap & Ray Tracing](docs/images/preview.png)
+#An end-to-end 3D Digital Twin built for real-time visualization of Wi-Fi (802.11) radio propagation, using NVIDIA Sionna's ray tracing engine and Three.js.
+![Sistem preview](docs/images/preview.png)
+![Volumetric Heatmap & Ray Tracing](docs/images/previewActive2.png)
 ![CSI Monitor & Receiver Analytics](docs/images/previewESP32.png)
 
 A virtual test room with **8 ESP32-S3 receivers** and **1 WiFi router** — built as a learning project to explore ray-tracing-based RF simulation before tackling the full [WiFi Vision 3D](https://github.com/JeronimoRepetto/wifi-csi-capture) research pipeline.
@@ -24,17 +25,17 @@ No physical hardware required. No SMPL body model (yet).
 
 ## Room Configuration
 
-| Parameter | Value |
-|-----------|-------|
-| Room dimensions | 2.0 × 3.5 × 2.0 m |
-| Wall thickness | 0.12 m |
-| Wall material | `itu_brick` (ITU-R P.2040) |
-| Floor/Ceiling | `itu_concrete` |
-| WiFi frequency | 2.437 GHz (Channel 6) |
-| Bandwidth | 40 MHz (HT40, 802.11n) |
-| Subcarriers | 114 (108 data) |
-| Transmitter | 1 × Router (behind back wall, Y=3.62m, Z=1.0m) |
-| Receivers | 8 × ESP32-S3 (4 high Z=1.9m + 4 low Z=0.1m) |
+| Parameter       | Value                                          |
+| --------------- | ---------------------------------------------- |
+| Room dimensions | 2.0 × 3.5 × 2.0 m                              |
+| Wall thickness  | 0.12 m                                         |
+| Wall material   | `itu_brick` (ITU-R P.2040)                     |
+| Floor/Ceiling   | `itu_concrete`                                 |
+| WiFi frequency  | 2.437 GHz (Channel 6)                          |
+| Bandwidth       | 40 MHz (HT40, 802.11n)                         |
+| Subcarriers     | 114 (108 data)                                 |
+| Transmitter     | 1 × Router (behind back wall, Y=3.62m, Z=1.0m) |
+| Receivers       | 8 × ESP32-S3 (4 high Z=1.9m + 4 low Z=0.1m)    |
 
 ### Sensor Layout
 
@@ -100,23 +101,23 @@ MVP-Sionna-Wifi/
 
 ### GPU Mode (Recommended)
 
-| Component | Minimum | Recommended |
-|:---|:---|:---|
-| **GPU** | NVIDIA GTX 1060 (6GB VRAM) | NVIDIA RTX 3060+ (8GB+ VRAM) |
-| **CUDA** | 11.8+ | 12.0+ |
-| **RAM** | 8 GB | 16 GB |
-| **CPU** | 4 cores | 8+ cores |
-| **OS** | Ubuntu 20.04 / WSL2 | Ubuntu 22.04 / WSL2 |
+| Component | Minimum                    | Recommended                  |
+| :-------- | :------------------------- | :--------------------------- |
+| **GPU**   | NVIDIA GTX 1060 (6GB VRAM) | NVIDIA RTX 3060+ (8GB+ VRAM) |
+| **CUDA**  | 11.8+                      | 12.0+                        |
+| **RAM**   | 8 GB                       | 16 GB                        |
+| **CPU**   | 4 cores                    | 8+ cores                     |
+| **OS**    | Ubuntu 20.04 / WSL2        | Ubuntu 22.04 / WSL2          |
 
 💡 With GPU acceleration, each simulation frame takes **~0.02–0.05s**.
 
 ### CPU-Only Mode (Fallback)
 
-| Component | Minimum | Recommended |
-|:---|:---|:---|
-| **CPU** | Intel i5 / AMD Ryzen 5 (4 cores) | Intel i7/i9 / AMD Ryzen 7+ (8+ cores) |
-| **RAM** | 16 GB | 32 GB |
-| **OS** | Ubuntu 20.04 / WSL2 | Ubuntu 22.04 / WSL2 |
+| Component | Minimum                          | Recommended                           |
+| :-------- | :------------------------------- | :------------------------------------ |
+| **CPU**   | Intel i5 / AMD Ryzen 5 (4 cores) | Intel i7/i9 / AMD Ryzen 7+ (8+ cores) |
+| **RAM**   | 16 GB                            | 32 GB                                 |
+| **OS**    | Ubuntu 20.04 / WSL2              | Ubuntu 22.04 / WSL2                   |
 
 ⚠️ Without GPU, each simulation frame takes **~0.15–0.5s** and uses **100% CPU**. Long sessions may cause thermal throttling.
 
@@ -143,14 +144,19 @@ websockets
 NVIDIA Sionna requires a Linux environment to utilize hardware GPU acceleration via TensorFlow. On Windows, you MUST use WSL2 (Ubuntu).
 
 ### 1. Prepare WSL2 (Ubuntu) Environment
+
 First, ensure you have an Ubuntu distribution installed in WSL2:
+
 ```bash
 wsl --install -d Ubuntu-22.04
 ```
-*Note: After installing, open the "Ubuntu 22.04" app from your Windows Start Menu to set up your UNIX username and password.*
+
+_Note: After installing, open the "Ubuntu 22.04" app from your Windows Start Menu to set up your UNIX username and password._
 
 ### 2. Install Python 3.10 and Sionna in WSL2
+
 Sionna is officially supported on Python 3.10. Open your **Ubuntu terminal** and run:
+
 ```bash
 # Install Miniconda
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
@@ -172,7 +178,9 @@ sudo apt install -y nvidia-cuda-toolkit
 ```
 
 ### 3. Install Backend Dependencies
-Navigate to your project folder from *inside* the Ubuntu terminal (e.g., `/mnt/c/Users/YourUser/Desktop/MVP-Sionna-Wifi`):
+
+Navigate to your project folder from _inside_ the Ubuntu terminal (e.g., `/mnt/c/Users/YourUser/Desktop/MVP-Sionna-Wifi`):
+
 ```bash
 cd /mnt/c/Users/jeron/Desktop/MVP-Sionna-Wifi/backend
 pip install -r requirements.txt
@@ -182,6 +190,7 @@ pip install sionna tensorflow
 ### 4. Running the Project
 
 **Start Backend (from Ubuntu WSL Terminal)**
+
 ```bash
 conda activate sionna
 cd /mnt/c/Users/jeron/Desktop/MVP-Sionna-Wifi/backend
@@ -189,12 +198,14 @@ python main.py
 ```
 
 In the terminal, check for:
+
 - `✅ Scene loaded` → Sionna loaded the room correctly
 - `Could not find cuda drivers` → Running in CPU mode (slower but functional)
 - `🟢 Sionna RT: Active` in the web UI → Sionna is active
 - `🟢 Sionna RT` badge on heatmap → Data is from real ray tracing, not mock
 
 **Start Frontend (from Windows PowerShell)**
+
 ```bash
 cd frontend
 npm install
@@ -205,13 +216,13 @@ Open `http://localhost:5173` in your browser.
 
 ## Roadmap
 
-| Version | Description |
-|:-------:|-------------|
+| Version  | Description                                 |
+| :------: | ------------------------------------------- |
 | **v0.1** | ← Current: Room + Sionna RT + Visualization |
-| v0.2 | Add SMPL body model as obstacle |
-| v0.3 | Animated human movement + dynamic CSI |
-| v0.4 | Compare simulated vs real CSI (ESP32) |
-| v0.5 | Full pose estimation pipeline integration |
+|   v0.2   | Add SMPL body model as obstacle             |
+|   v0.3   | Animated human movement + dynamic CSI       |
+|   v0.4   | Compare simulated vs real CSI (ESP32)       |
+|   v0.5   | Full pose estimation pipeline integration   |
 
 ## Related Projects
 

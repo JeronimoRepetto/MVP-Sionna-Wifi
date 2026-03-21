@@ -7,19 +7,50 @@ import asyncio
 import json
 import time
 from typing import Optional
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from config import API_HOST, API_PORT
-from scene_loader import load_scene, get_scene_info
+from scene_loader import load_scene, get_scene_info, MITSUBA_VARIANT
 from simulation import run_simulation
+
+# Global scene (loaded once at startup)
+scene = None
+last_simulation_result = None
+
+
+@asynccontextmanager
+async def lifespan(app):
+    """Load the scene at server startup, clean up on shutdown."""
+    global scene
+    try:
+        scene = load_scene()
+        # Check what we actually got
+        if isinstance(scene, dict) and scene.get("type") == "mock":
+            print("⚠️  Running in mock mode (Sionna not available)")
+        else:
+            from scene_loader import MITSUBA_VARIANT as variant
+            backend = "CUDA+OptiX (GPU)" if "cuda" in variant else "LLVM (CPU)"
+            print(f"✅ Scene loaded at startup — Backend: {backend}")
+    except Exception as e:
+        print(f"⚠️  Could not load scene: {e}")
+        print("   Running in mock mode")
+        scene = {"type": "mock"}
+    
+    yield  # Server runs here
+    
+    # Shutdown
+    print("🔴 Server shutting down")
+
 
 app = FastAPI(
     title="MVP-Sionna-WiFi",
     description="WiFi propagation simulation using Sionna RT",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # CORS for frontend dev server
@@ -30,23 +61,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Global scene (loaded once at startup)
-scene = None
-last_simulation_result = None
-
-
-@app.on_event("startup")
-async def startup():
-    """Load the scene at server startup."""
-    global scene
-    try:
-        scene = load_scene()
-        print("✅ Scene loaded at startup")
-    except Exception as e:
-        print(f"⚠️  Could not load scene: {e}")
-        print("   Running in mock mode")
-        scene = {"type": "mock"}
 
 
 @app.get("/api/scene")
