@@ -15,7 +15,7 @@ The backend is responsible for physics simulation. It creates a digital replica 
   - *Material Thickness*: All radio materials (brick, concrete, wood, etc.) have their `thickness` set programmatically from `config.py`, ensuring realistic signal attenuation through walls.
   - *Antenna Pattern*: A 1x1 `PlanarArray` with a `dipole` pattern is used, mimicking the real-world vertical polarization antennas.
 - **`simulation.py`**: Executes the mathematical calculations (Shooting and Bouncing Rays). It computes paths, Channel Impulse Response (CIR), and the full 114-subcarrier Channel State Information (CSI).
-- **`main.py`**: The FastAPI server exposes `/api/simulate` and `/ws`.
+- **`main.py`**: The FastAPI server exposes `/api/scene`, `/api/simulate`, `/api/coverage` and `/ws/simulation`.
 
 ### The Frontend (Vite + Three.js)
 The frontend is responsible for rendering the calculated data into an interactive, visually stunning interface.
@@ -41,11 +41,17 @@ Because Sionna computes a "static" snapshot of the room per simulation, the fron
 
 ## 4. Performance: GPU vs CPU Mode
 
-Sionna RT is designed for **NVIDIA GPUs with CUDA**. In your WSL2 terminal, if you see:
+The project features an automatic backend fallback chain depending on your hardware:
+
+1. **CUDA + OptiX (GPU)**: `~0.02s` per frame. Requires NVIDIA GPU and OptiX configuration in WSL2.
+2. **LLVM (CPU)**: `~0.15s` per frame. Automatic fallback if OptiX fails. Uses 100% CPU.
+3. **Mock Mode**: Instant. Synthetic data when dependencies are missing.
+
+Sionna RT is designed for **NVIDIA GPUs with CUDA**. In your WSL2 terminal, check the startup logs:
 ```
-Could not find cuda drivers on your machine, GPU will not be used.
+🟢 Mitsuba backend: CUDA + OptiX mono-polarized (GPU)
 ```
-Sionna is running in **CPU fallback mode**. It still produces correct results but:
+If you see `🟡 Mitsuba backend: LLVM mono-polarized (CPU)` instead, Sionna is running in **CPU fallback mode**. It still produces correct results but:
 - Each frame takes **~0.15–0.5s** instead of ~0.02s
 - **CPU usage hits 100%** across all cores
 - **System temperature may rise significantly** — monitor with `sensors` (Linux) or HWMonitor (Windows)
@@ -55,7 +61,7 @@ Sionna is running in **CPU fallback mode**. It still produces correct results bu
 ## 5. Setup
 
 See the [README](../README.md) for full installation instructions. Key steps:
-1. WSL2 Ubuntu + Miniconda with Python 3.10
+1. WSL2 Ubuntu + Miniconda with Python 3.10–3.11
 2. `pip install sionna tensorflow` inside the conda environment
 3. Start backend: `python main.py` / Frontend: `npm run dev`
 

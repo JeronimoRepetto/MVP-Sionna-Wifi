@@ -87,7 +87,10 @@ MVP-Sionna-Wifi/
 │   ├── index.html
 │   ├── style.css
 │   └── package.json
-├── internDocs/               # Internal documentation
+├── docs/
+│   ├── HOW_IT_WORKS.md       # Technical deep-dive
+│   └── INSTALL_WSL2_GPU.md   # GPU setup guide (WSL2 + OptiX)
+├── internDocs/               # Internal documentation (not pushed)
 │   ├── BLENDER_ROOM_GUIDE.md # How to create custom rooms
 │   ├── FRONT_EXP.md          # Frontend architecture
 │   └── BACK_EXP.md           # Backend architecture
@@ -123,16 +126,16 @@ MVP-Sionna-Wifi/
 
 ### Software Requirements
 
-- **Python** 3.10 (required by Sionna)
+- **Python** 3.10–3.11 (required by Sionna)
 - **Blender** 3.6+ (for room modeling only)
 - **Node.js** 18+ (for frontend)
 
 ### Python Dependencies
 
 ```
-sionna>=0.19
+sionna-rt
 mitsuba>=3.0
-tensorflow>=2.14
+tensorflow[and-cuda]
 numpy
 fastapi
 uvicorn
@@ -143,68 +146,54 @@ websockets
 
 NVIDIA Sionna requires a Linux environment to utilize hardware GPU acceleration via TensorFlow. On Windows, you MUST use WSL2 (Ubuntu).
 
-### 1. Prepare WSL2 (Ubuntu) Environment
+> For detailed GPU setup (OptiX + CUDA), see [docs/INSTALL_WSL2_GPU.md](docs/INSTALL_WSL2_GPU.md)
 
-First, ensure you have an Ubuntu distribution installed in WSL2:
+### Quick Start
+
+**1. Prepare WSL2**
 
 ```bash
 wsl --install -d Ubuntu-22.04
 ```
 
-_Note: After installing, open the "Ubuntu 22.04" app from your Windows Start Menu to set up your UNIX username and password._
-
-### 2. Install Python 3.10 and Sionna in WSL2
-
-Sionna is officially supported on Python 3.10. Open your **Ubuntu terminal** and run:
+**2. Install Conda + Python in WSL2**
 
 ```bash
-# Install Miniconda
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 bash Miniconda3-latest-Linux-x86_64.sh -b
 ~/miniconda3/bin/conda init bash
 source ~/.bashrc
-
-# Accept Conda Terms of Service
-conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
-conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
-
-# Create Python environment
-conda create -n sionna python=3.10 -y
+conda create -n sionna python=3.11 -y
 conda activate sionna
-
-# Install CUDA toolkit (if not already installed via Windows drivers)
-sudo apt update
-sudo apt install -y nvidia-cuda-toolkit
 ```
 
-### 3. Install Backend Dependencies
-
-Navigate to your project folder from _inside_ the Ubuntu terminal (e.g., `/mnt/c/Users/YourUser/Desktop/MVP-Sionna-Wifi`):
+**3. Install Backend Dependencies**
 
 ```bash
-cd /mnt/c/Users/jeron/Desktop/MVP-Sionna-Wifi/backend
+cd /mnt/c/Users/<YOUR_USERNAME>/Desktop/MVP-Sionna-Wifi/backend
 pip install -r requirements.txt
-pip install sionna tensorflow
+pip install sionna-rt tensorflow[and-cuda]
 ```
 
-### 4. Running the Project
+**4. (Optional) Enable GPU OptiX** — see [GPU Setup Guide](docs/INSTALL_WSL2_GPU.md)
 
-**Start Backend (from Ubuntu WSL Terminal)**
+**5. Start Backend (WSL2 Terminal)**
 
 ```bash
 conda activate sionna
-cd /mnt/c/Users/jeron/Desktop/MVP-Sionna-Wifi/backend
+cd /mnt/c/Users/<YOUR_USERNAME>/Desktop/MVP-Sionna-Wifi/backend
 python main.py
 ```
 
-In the terminal, check for:
+Check the console for the active backend:
 
-- `✅ Scene loaded` → Sionna loaded the room correctly
-- `Could not find cuda drivers` → Running in CPU mode (slower but functional)
-- `🟢 Sionna RT: Active` in the web UI → Sionna is active
-- `🟢 Sionna RT` badge on heatmap → Data is from real ray tracing, not mock
+| Log Message | Meaning |
+|-------------|--------|
+| `🟢 Mitsuba backend: CUDA + OptiX (GPU)` | Full GPU acceleration |
+| `🟡 Mitsuba backend: LLVM (CPU)` | CPU fallback (OptiX not configured) |
+| `⚠️ Sionna/Mitsuba not installed` | Mock mode (install dependencies) |
 
-**Start Frontend (from Windows PowerShell)**
+**6. Start Frontend (Windows PowerShell)**
 
 ```bash
 cd frontend
