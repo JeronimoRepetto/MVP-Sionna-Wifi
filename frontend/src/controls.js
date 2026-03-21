@@ -8,6 +8,7 @@ import { filterRaysByReceiver, setRaysVisible } from './rays.js';
 import { setHeatmapVisible, setHeatmapHeight } from './heatmap.js';
 import { setActiveReceiver } from './sensors.js';
 import { initCSIPanel, openCSI, closeCSI } from './csi_panel.js';
+import { setHumanVisible, getSmplParams } from './human.js';
 
 let lastSimResult = null;
 let currentSceneInfo = null;
@@ -100,6 +101,7 @@ function getSimulationParams() {
         num_samples: parseInt(document.getElementById('param-samples').value),
         diffraction: document.getElementById('param-diffraction').checked,
         heatmap_height: parseFloat(document.getElementById('heatmap-height').value) || 0.2,
+        smpl_params: getSmplParams(),
     };
 }
 
@@ -129,6 +131,11 @@ function setupParameterSliders() {
 }
 
 function setupDisplayToggles() {
+    // Human Obstacle
+    document.getElementById('toggle-human').addEventListener('change', (e) => {
+        setHumanVisible(e.target.checked);
+    });
+
     // Show rays
     document.getElementById('toggle-rays').addEventListener('change', (e) => {
         setRaysVisible(e.target.checked);
