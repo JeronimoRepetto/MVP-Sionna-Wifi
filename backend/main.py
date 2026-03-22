@@ -398,6 +398,10 @@ async def handle_sim_walk(websocket: WebSocket, params: dict):
     """
     global is_animating, sim_walk_paused, sim_walk_frames_dir, scene, human_currently_in_scene
     
+    if is_animating:
+        print("⚠️ Sim walk already in progress, ignoring new request.")
+        return
+    
     if smpl_manager is None:
         await websocket.send_json({
             "status": "error",
@@ -424,7 +428,7 @@ async def handle_sim_walk(websocket: WebSocket, params: dict):
         "status": "sim_walk_start",
         "total_frames": num_frames,
         "start_frame": start_frame,
-        "message": f"Starting sim-walk: {num_frames} frames...",
+        "message": f"Starting continuous sim-walk: {num_frames} frames per cycle...",
     })
     
     # Generate walk sequence (poses + positions)
@@ -436,19 +440,20 @@ async def handle_sim_walk(websocket: WebSocket, params: dict):
     sim_walk_frames_dir = frames_dir
     
     try:
-        for i in range(start_frame, num_frames):
+        frame_idx = start_frame
+        while True:
             # ── Check cancellation ──
             if not is_animating:
-                print(f"🛑 Sim walk cancelled at frame {i}/{num_frames}")
+                print(f"🛑 Sim walk stopped internally.")
                 break
             
             # ── Check pause ──
             while sim_walk_paused and is_animating:
                 await websocket.send_json({
                     "status": "sim_walk_paused",
-                    "frame_index": i,
+                    "frame_index": frame_idx % num_frames,
                     "total_frames": num_frames,
-                    "message": f"Paused at frame {i+1}/{num_frames}",
+                    "message": f"Paused at frame {(frame_idx % num_frames)+1}/{num_frames}",
                 })
                 sim_walk_resume_event.clear()
                 await sim_walk_resume_event.wait()
@@ -456,10 +461,12 @@ async def handle_sim_walk(websocket: WebSocket, params: dict):
             if not is_animating:
                 break
             
-            frame = sequence[i]
+            # Cycle through the sequence indefinitely
+            seq_idx = frame_idx % num_frames
+            frame = sequence[seq_idx]
             
             # ── 1. Generate OBJ for Sionna (Y↔Z swap, with position baked) ──
-            temp_sionna_obj = os.path.join(frames_dir, f"sionna_{i:04d}.obj")
+            temp_sionna_obj = os.path.join(frames_dir, f"sionna_{seq_idx:04d}.obj")
             smpl_manager.save_obj(
                 temp_sionna_obj,
                 body_pose=frame['body_pose'],
@@ -469,7 +476,7 @@ async def handle_sim_walk(websocket: WebSocket, params: dict):
             )
             
             # ── 2. Generate OBJ for frontend display (no swap, no position) ──
-            display_obj = os.path.join(frames_dir, f"display_{i:04d}.obj")
+            display_obj = os.path.join(frames_dir, f"display_{seq_idx:04d}.obj")
             smpl_manager.save_obj(
                 display_obj,
                 body_pose=frame['body_pose'],
@@ -488,12 +495,12 @@ async def handle_sim_walk(websocket: WebSocket, params: dict):
             # ── 5. Send frame + results to frontend ──
             await websocket.send_json({
                 "status": "sim_walk_frame",
-                "frame_index": i,
+                "frame_index": seq_idx,
                 "total_frames": num_frames,
-                "obj_url": f"/api/sim_walk_frame/{i}",
+                "obj_url": f"/api/sim_walk_frame/{seq_idx}",
                 "position": frame['display_position'],
                 "result": result,
-                "message": f"Frame {i+1}/{num_frames} complete",
+                "message": f"Frame {seq_idx+1}/{num_frames} complete",
             })
             
             # Cleanup Sionna OBJ (display OBJ stays for frontend)
@@ -502,10 +509,12 @@ async def handle_sim_walk(websocket: WebSocket, params: dict):
             except:
                 pass
             
-            print(f"  📡 Sim-walk frame {i+1}/{num_frames}: {result.get('simulation_time', 0):.2f}s")
+            print(f"  📡 Sim-walk frame {seq_idx+1}/{num_frames}: {result.get('simulation_time', 0):.2f}s")
             
             # Small yield to allow WebSocket message processing (pause/stop)
             await asyncio.sleep(0.05)
+            
+            frame_idx += 1
         
     except asyncio.CancelledError:
         print("🛑 Sim walk task cancelled")

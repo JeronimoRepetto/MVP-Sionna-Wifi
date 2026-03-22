@@ -436,18 +436,12 @@ export function handleAnimationMessage(data) {
         
         case 'sim_walk_complete':
             showProgress(1, `✅ Sim-walk complete: ${data.total_frames} frames`);
-            // Auto-restart loop for continuous data generation
-            if (isWalkAnimating && isSimWalking) {
-                const numFrames = parseInt(document.getElementById('anim-frames')?.value || '16');
-                const simParams = getSimulationParams();
-                requestSimWalk({
-                    num_frames: numFrames,
-                    max_depth: simParams.max_depth,
-                    num_samples: simParams.num_samples,
-                    diffraction: simParams.diffraction,
-                    heatmap_height: simParams.heatmap_height,
-                });
-                showProgress(0.01, '🔄 Restarting sim-walk loop...');
+            isWalkAnimating = false;
+            isSimWalking = false;
+            const stopBtn2 = document.getElementById('btn-animate');
+            if (stopBtn2) {
+                stopBtn2.classList.remove('animating');
+                stopBtn2.innerHTML = '<span class="btn-icon">▶</span> Play Walk';
             }
             break;
     }

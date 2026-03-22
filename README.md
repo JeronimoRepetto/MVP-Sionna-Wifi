@@ -55,6 +55,9 @@ This project creates a **100% virtual** simulation environment:
 
 ## SMPL Human Body Integration
 
+> [!IMPORTANT]
+> **The SMPL model files (`.pkl`) are NOT included in this repository** due to [Max Planck Institute (MPI-IS) licensing restrictions](https://smpl.is.tue.mpg.de/). You must download them separately and place them in `backend/models/smpl/`. See the [SMPL setup guide](docs/INSTALL_WSL2_GPU.md#10-smpl-human-integration-optional) for step-by-step instructions.
+
 The simulation includes a realistic **SMPL human body model** (6,890 vertices) injected as an RF obstacle into the Sionna RT scene. The human body is modeled with `itu_wet_ground` dielectric properties (high permittivity ≈ water), closely approximating the electromagnetic behavior of living tissue at 2.4 GHz.
 
 ![SMPL model inside the simulation room](docs/images/smpl_preview.png)
@@ -94,6 +97,7 @@ MVP-Sionna-Wifi/
 │   ├── smpl_manager.py       # SMPL human model generation (smplx + trimesh)
 │   ├── pose_library.py       # Walking keyframes & animation sequence generation
 │   ├── main.py               # FastAPI server
+│   ├── models/smpl/          # ⚠️ SMPL .pkl files (gitignored — see setup guide)
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
