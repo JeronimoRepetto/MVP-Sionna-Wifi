@@ -52,3 +52,6 @@ output/
 # Temp
 .tmp_clone/
 *.deb
+
+# SMPL Models
+backend/models/smpl/
