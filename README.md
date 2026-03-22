@@ -65,15 +65,17 @@ The simulation includes a realistic **SMPL human body model** (6,890 vertices) i
 When the **Human Obstacle** toggle is enabled, the SMPL mesh is dynamically injected into the Mitsuba scene XML and the ray tracing engine recalculates all propagation paths — including absorption, reflection, and diffraction around the human body.
 
 ![Ray tracing with SMPL obstacle active](docs/images/smpl_rays.png)
-![Heatmap coverage changes with human present](docs/images/smpl_heatmap.png)
 
 ### Walking Animation
 
 The **Play Walk** animation system moves the human model across the room while running a Sionna RT simulation per frame. This lets you observe how human movement affects WiFi signal propagation, ESP32 readings, and heatmap coverage in real-time. Controls include:
+
 - **Play/Pause** button to start/stop the walk animation
 - **Speed** slider (0.5x–2.0x)
 - **Frames** slider (8–32 frames per walk cycle)
 - **Frame counter** showing current progress
+
+![animation](docs/images/preview_animation.gif)
 
 ## Architecture
 
