@@ -4,7 +4,13 @@ fastapi>=0.100
 uvicorn[standard]>=0.22
 websockets>=11.0
 
-# Sionna & TensorFlow (uncomment when GPU is configured)
-# sionna>=1.0
-# tensorflow>=2.12
-# mitsuba>=3.0
+# Sionna RT simulation engine (install separately in WSL2)
+# pip install sionna tensorflow[and-cuda]
+# sionna
+# tensorflow[and-cuda]
+# mitsuba  (installed as sionna dependency)
+
+# SMPL human model (optional — for human obstacle feature)
+smplx
+torch
+trimesh

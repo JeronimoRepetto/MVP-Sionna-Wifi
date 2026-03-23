@@ -89,8 +89,7 @@ Blender Script ──XML──► Mitsuba 3 ──► Sionna RT ──► FastAP
 ```
 MVP-Sionna-Wifi/
 ├── blender/
-│   ├── generate_room.py      # Procedural room generation (run in Blender)
-│   └── export_scene.py       # Export to Mitsuba XML
+│   └── generate_room.py      # Procedural room generation (run in Blender)
 ├── scenes/                   # Exported XML scenes
 ├── backend/
 │   ├── config.py             # Physical parameters & sensor positions
@@ -109,18 +108,23 @@ MVP-Sionna-Wifi/
 │   │   ├── sensors.js        # Tx/Rx markers
 │   │   ├── human.js          # SMPL human model loader & positioning
 │   │   ├── heatmap.js        # Coverage overlay
+│   │   ├── csi_panel.js      # CSI amplitude/phase charts
 │   │   ├── controls.js       # UI panel
 │   │   └── websocket.js      # WS client
 │   ├── index.html
 │   ├── style.css
 │   └── package.json
+├── tests/
+│   ├── test_config.py        # Config validation tests
+│   ├── test_scene_loader.py  # Scene loader tests
+│   ├── test_simulation.py    # Simulation engine tests
+│   ├── test_pose_library.py  # Pose library tests
+│   ├── test_animation.py     # Animation integration tests
+│   ├── test_api.py           # API endpoint tests
+│   └── run_all.py            # Test runner
 ├── docs/
 │   ├── HOW_IT_WORKS.md       # Technical deep-dive
 │   └── INSTALL_WSL2_GPU.md   # GPU setup guide (WSL2 + OptiX)
-├── internDocs/               # Internal documentation (not pushed)
-│   ├── BLENDER_ROOM_GUIDE.md # How to create custom rooms
-│   ├── FRONT_EXP.md          # Frontend architecture
-│   └── BACK_EXP.md           # Backend architecture
 └── README.md
 ```
 
@@ -159,19 +163,34 @@ MVP-Sionna-Wifi/
 
 ### Python Dependencies
 
+**Core (always required):**
+
 ```
-sionna-rt
-mitsuba>=3.0
-tensorflow[and-cuda]
-numpy
-fastapi
-uvicorn
-websockets
-smplx
-torch
-trimesh
-chumpy  # Install with: pip install --no-build-isolation chumpy
+numpy>=1.24
+fastapi>=0.100
+uvicorn[standard]>=0.22
+websockets>=11.0
 ```
+
+**Simulation engine (for real ray tracing):**
+
+```
+sionna              # Sionna RT ray tracing library
+tensorflow[and-cuda] # TensorFlow with CUDA support
+mitsuba             # Mitsuba 3 renderer (installed as sionna dependency)
+```
+
+**SMPL human model (optional — for human obstacle feature):**
+
+```
+smplx               # SMPL/SMPL-X body model library
+torch               # PyTorch (required by smplx)
+trimesh             # 3D mesh processing
+```
+
+> [!NOTE]
+> Without the simulation engine packages, the backend runs in **mock mode** with synthetic data.
+> Without the SMPL packages, the human obstacle feature is disabled but everything else works.
 
 ## Setup & Installation (Windows / WSL2)
 
@@ -203,7 +222,7 @@ conda activate sionna
 ```bash
 cd /mnt/c/Users/<YOUR_USERNAME>/Desktop/MVP-Sionna-Wifi/backend
 pip install -r requirements.txt
-pip install sionna-rt tensorflow[and-cuda]
+pip install sionna tensorflow[and-cuda]
 ```
 
 **4. (Optional) Enable GPU OptiX** — see [GPU Setup Guide](docs/INSTALL_WSL2_GPU.md)
