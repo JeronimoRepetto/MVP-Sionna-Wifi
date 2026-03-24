@@ -13,6 +13,8 @@ PROJECT_DIR = os.path.dirname(TEST_DIR)
 
 test_files = [
     "test_config.py",
+    "test_pose_library.py",
+    "test_animation.py",
     "test_scene_loader.py",
     "test_simulation.py",
     "test_api.py",

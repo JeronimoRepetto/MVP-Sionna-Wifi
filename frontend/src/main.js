@@ -12,7 +12,8 @@ import { createRays, updateRayAnimations, clearRays, setRaysVisible } from './ra
 import { createHeatmap, setHeatmapVisible } from './heatmap.js';
 import { createHuman } from './human.js';
 import { initControls, populateReceiverList, updateConnectionStatus, 
-         showProgress, resetSimulateButton, setSimulationResult, runNextLiveSimulation, setControlsSceneInfo } from './controls.js';
+         showProgress, resetSimulateButton, setSimulationResult, runNextLiveSimulation, 
+         setControlsSceneInfo, handleAnimationMessage } from './controls.js';
 import { initWebSocket, sendMessage } from './websocket.js';
 
 // =============================================================================
@@ -189,6 +190,12 @@ function onWebSocketMessage(data) {
     
     if (data.status === 'complete' && data.result) {
         onSimulationComplete(data);
+        return;
+    }
+    
+    // Route animation and sim-walk messages
+    if (data.status && (data.status.startsWith('animation_') || data.status.startsWith('sim_walk_'))) {
+        handleAnimationMessage(data);
         return;
     }
     

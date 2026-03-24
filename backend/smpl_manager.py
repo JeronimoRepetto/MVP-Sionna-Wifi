@@ -25,10 +25,12 @@ with warnings.catch_warnings():
 import smplx
 import trimesh
 
+from pose_library import generate_walk_sequence as _generate_walk_seq
+
 class SMPLManager:
     """
-    Gestor de mallas SMPL. Usa la librería smplx para generar modelos humanos
-    en 3D a partir de parámetros (pose, shape).
+    SMPL mesh manager. Uses the smplx library to generate 3D human models
+    from pose and shape parameters.
     """
     def __init__(self, model_folder='models'):
         self.model_folder = model_folder
@@ -86,23 +88,68 @@ class SMPLManager:
 
         return vertices, faces
 
-    def save_obj(self, filepath, betas=None, body_pose=None, global_orient=None, transl=None):
-        """Genera y guarda la malla como archivo .obj"""
+    def save_obj(self, filepath, betas=None, body_pose=None, global_orient=None, transl=None, for_sionna=True):
+        """
+        Generate and save mesh as .obj file.
+        
+        Args:
+            for_sionna: If True, swap Y↔Z so model stands upright in Mitsuba Z-up scene.
+                        If False, keep SMPL native Y-up (for Three.js which applies rotation).
+        """
         vertices, faces = self.generate_mesh(betas, body_pose, global_orient, transl)
-        mesh = trimesh.Trimesh(vertices, faces)
         
-        # Ensure directory exists
+        if for_sionna:
+            # Swap Y↔Z: SMPL Y-up → Mitsuba Z-up
+            vertices_zup = vertices.copy()
+            vertices_zup[:, 1] = vertices[:, 2]   # new Y = old Z (depth)
+            vertices_zup[:, 2] = vertices[:, 1]   # new Z = old Y (height)
+            mesh = trimesh.Trimesh(vertices_zup, faces)
+        else:
+            mesh = trimesh.Trimesh(vertices, faces)
+        
         os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
-        
         mesh.export(filepath)
         return filepath
 
-# Para pruebas aisladas
+    def generate_walk_sequence(self, num_frames=16):
+        """Generate a walking animation sequence using pose_library keyframes."""
+        return _generate_walk_seq(num_frames)
+
+    def save_walk_sequence_objs(self, output_dir, num_frames=16, betas=None):
+        """
+        Generate and save all walk animation frames as .obj files.
+        """
+        os.makedirs(output_dir, exist_ok=True)
+        sequence = self.generate_walk_sequence(num_frames)
+        
+        paths = []
+        for i, frame in enumerate(sequence):
+            filepath = os.path.join(output_dir, f"frame_{i:04d}.obj")
+            self.save_obj(
+                filepath,
+                betas=betas,
+                body_pose=frame['body_pose'],
+                global_orient=frame['global_orient'],
+                transl=frame['transl'],
+                for_sionna=False,  # Animation OBJs go to Three.js, not Sionna
+            )
+            paths.append(filepath)
+        
+        return paths, sequence
+
+
+# For standalone tests
 if __name__ == "__main__":
     manager = SMPLManager()
     output_path = "output/human_test.obj"
     try:
         manager.save_obj(output_path)
         print(f"Generated mesh saved to {output_path}")
+        
+        # Test walk sequence
+        seq = manager.generate_walk_sequence(4)
+        print(f"Walk sequence: {len(seq)} frames")
+        for i, frame in enumerate(seq):
+            print(f"  Frame {i}: Y={frame['transl'][1]:.2f}m")
     except Exception as e:
-        print("Could not generate mesh because SMPL files are missing.")
+        print(f"Could not generate mesh: {e}")

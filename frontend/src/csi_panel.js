@@ -1,50 +1,77 @@
 /**
- * MVP-Sionna-WiFi: CSI Spectrogram Panel
- * Visualizes the 114 OFDM subcarriers similar to the wifi-csi-capture tool.
- * Draws Amplitude, Phase, Spectrogram, and RSSI.
+ * MVP-Sionna-WiFi: CSI Monitor Panel
+ * Visualizes real Sionna simulation data for each ESP32 receiver.
+ * 
+ * 5 panels (matching wifi-csi-capture visualize_csi.py):
+ *   1. Subcarrier Amplitude (current frame, linear scale)
+ *   2. Subcarrier Phase (unwrapped)
+ *   3. Amplitude Spectrogram (time × subcarrier heatmap)
+ *   4. Activity Indicator (CV = std/mean turbulence)
+ *   5. RSSI over time
+ * 
+ * Each ESP32 has its own independent history buffer.
+ * Data is pushed in real-time via pushRealFrame() from simulation results.
  */
 
 const MAX_SUBCARRIERS = 114;
 const HISTORY_LEN = 100;
-let animationId = null;
-let currentReceiver = null;
+
 let active = false;
+let currentReceiver = null;
 
-// We fake continuous data by adding noise to the static mock CSI
-// This creates the "turbulence" required to see a live spectrogram
-let baseCSI_Amp = new Float32Array(MAX_SUBCARRIERS);
-let baseCSI_Phase = new Float32Array(MAX_SUBCARRIERS);
-let baseRSSI = -50;
+// Per-receiver history storage: Map<receiverName, ReceiverState>
+const receiverStates = new Map();
 
-// History buffers
-const ampHistory = [];
-const rssiHistory = [];
-const frameCount = { value: 0 };
+function createEmptyState() {
+    const ampHistory = [];
+    const phaseHistory = [];
+    const rssiHistory = [];
+    const activityHistory = [];
+    for (let i = 0; i < HISTORY_LEN; i++) {
+        ampHistory.push(new Float32Array(MAX_SUBCARRIERS));
+        phaseHistory.push(new Float32Array(MAX_SUBCARRIERS));
+        rssiHistory.push(-90);
+        activityHistory.push(0);
+    }
+    return {
+        ampHistory,
+        phaseHistory,
+        rssiHistory,
+        activityHistory,
+        frameCount: 0,
+        baselineAmp: null,
+        hasBaseline: false,
+        spectroMaxVal: 1e-10,  // Only grows, never shrinks → stable colors
+    };
+}
 
-// Canvas Contexts
-var ctxAmp, ctxPhase, ctxSpectro, ctxRssi;
+function getState(receiverName) {
+    if (!receiverStates.has(receiverName)) {
+        receiverStates.set(receiverName, createEmptyState());
+    }
+    return receiverStates.get(receiverName);
+}
 
-const jetColormap = (t) => {
+// Canvas contexts
+let ctxAmp, ctxPhase, ctxSpectro, ctxActivity, ctxRssi;
+
+// Inferno-like colormap
+function infernoColor(t) {
     t = Math.max(0, Math.min(1, t));
-    const r = Math.max(0, Math.min(255, Math.round(255 * (1.5 - Math.abs(1 - 4 * (t - 0.75))))));
-    const g = Math.max(0, Math.min(255, Math.round(255 * (1.5 - Math.abs(1 - 4 * (t - 0.5))))));
-    const b = Math.max(0, Math.min(255, Math.round(255 * (1.5 - Math.abs(1 - 4 * (t - 0.25))))));
-    return `rgb(${r},${g},${b})`;
-};
+    const r = Math.min(255, Math.round(255 * Math.min(1, 1.5 * t)));
+    const g = Math.min(255, Math.round(255 * Math.max(0, (t - 0.4) * 2)));
+    const b = Math.min(255, Math.round(255 * Math.max(0, 0.5 - Math.abs(t - 0.3) * 2)));
+    return { r, g, b };
+}
 
 export function initCSIPanel() {
-    ctxAmp = document.getElementById('chart-amp').getContext('2d');
-    ctxPhase = document.getElementById('chart-phase').getContext('2d');
-    ctxSpectro = document.getElementById('chart-spectro').getContext('2d');
-    ctxRssi = document.getElementById('chart-rssi').getContext('2d');
+    ctxAmp = document.getElementById('chart-amp')?.getContext('2d');
+    ctxPhase = document.getElementById('chart-phase')?.getContext('2d');
+    ctxSpectro = document.getElementById('chart-spectro')?.getContext('2d');
+    ctxActivity = document.getElementById('chart-activity')?.getContext('2d');
+    ctxRssi = document.getElementById('chart-rssi')?.getContext('2d');
     
-    document.getElementById('close-csi-btn').addEventListener('click', closeCSI);
-    
-    // Fill initial history
-    for(let i=0; i<HISTORY_LEN; i++) {
-        ampHistory.push(new Float32Array(MAX_SUBCARRIERS));
-        rssiHistory.push(-90);
-    }
+    document.getElementById('close-csi-btn')?.addEventListener('click', closeCSI);
 }
 
 export function openCSI(receiverName, csiData, rssiData) {
@@ -55,13 +82,13 @@ export function openCSI(receiverName, csiData, rssiData) {
     document.getElementById('csi-panel').classList.remove('hidden');
     active = true;
     
-    if (csiData) {
-        updateBaseData(csiData, rssiData);
-    }
+    // Redraw with this receiver's existing history
+    const st = getState(receiverName);
+    redrawAll(st, rssiData || -90);
     
-    if (!animationId) {
-        lastTime = performance.now();
-        animationId = requestAnimationFrame(renderLoop);
+    // If we have initial data, push it
+    if (csiData) {
+        pushRealFrame(csiData, rssiData);
     }
 }
 
@@ -69,196 +96,349 @@ export function closeCSI() {
     document.getElementById('csi-panel').classList.add('hidden');
     active = false;
     currentReceiver = null;
-    if (animationId) {
-        cancelAnimationFrame(animationId);
-        animationId = null;
+}
+
+/**
+ * Reset history for a specific receiver (or all if no name given).
+ */
+export function resetCSIHistory(receiverName) {
+    if (receiverName) {
+        receiverStates.delete(receiverName);
+    } else {
+        receiverStates.clear();
     }
 }
 
-export function updateBaseData(csiData, rssiData) {
-    baseRSSI = rssiData;
+/**
+ * Push a real Sionna simulation frame into the history for the SPECIFIED receiver.
+ * Called from controls.js whenever a simulation result arrives.
+ * 
+ * @param {Object} csiData - { receiver, amplitude_db[], phase_rad[], mean_amplitude_db }
+ * @param {number} rssiValue - RSSI in dBm
+ * @param {string} [receiverName] - defaults to csiData.receiver or currentReceiver
+ */
+export function pushRealFrame(csiData, rssiValue, receiverName) {
     if (!csiData || !csiData.amplitude_db || !csiData.phase_rad) return;
     
+    const rxName = receiverName || csiData.receiver || currentReceiver;
+    if (!rxName) return;
+    
+    const st = getState(rxName);
     const subcount = Math.min(MAX_SUBCARRIERS, csiData.amplitude_db.length);
+    
+    // Convert dB to linear amplitude
+    const ampLinear = new Float32Array(MAX_SUBCARRIERS);
+    const phaseRaw = new Float32Array(MAX_SUBCARRIERS);
+    
     for (let i = 0; i < subcount; i++) {
-        let db = csiData.amplitude_db[i]; 
-        // Normalize dB from [-100, -30] to [0.0, 1.0] approx
-        let normAmp = (db + 100) / 70;
-        normAmp = Math.max(0.01, Math.min(1.0, normAmp));
-        
-        baseCSI_Amp[i] = normAmp * 100; // Map to 0-100 scale for drawing
-        baseCSI_Phase[i] = csiData.phase_rad[i];
+        ampLinear[i] = Math.pow(10, csiData.amplitude_db[i] / 20);
+        phaseRaw[i] = csiData.phase_rad[i];
+    }
+    
+    // Store baseline (first real frame for this receiver)
+    if (!st.hasBaseline) {
+        st.baselineAmp = new Float32Array(ampLinear);
+        st.hasBaseline = true;
+    }
+    
+    // Phase unwrap
+    const phaseUnwrapped = unwrapPhase(phaseRaw);
+    
+    // Compute activity (CV = std/mean)
+    const mean = ampLinear.reduce((a, b) => a + b, 0) / subcount;
+    let variance = 0;
+    for (let i = 0; i < subcount; i++) {
+        variance += (ampLinear[i] - mean) ** 2;
+    }
+    const std = Math.sqrt(variance / subcount);
+    const cv = mean > 0 ? std / mean : 0;
+    
+    // Push to this receiver's history
+    st.ampHistory.shift();
+    st.ampHistory.push(ampLinear);
+    st.phaseHistory.shift();
+    st.phaseHistory.push(phaseUnwrapped);
+    st.rssiHistory.shift();
+    st.rssiHistory.push(rssiValue || -90);
+    st.activityHistory.shift();
+    st.activityHistory.push(cv);
+    st.frameCount++;
+    
+    // Only redraw if this receiver's panel is currently visible
+    if (active && rxName === currentReceiver && ctxAmp) {
+        redrawAll(st, rssiValue || -90);
     }
 }
 
-// Generate one frame of noisy data from the base CSI to animate the spectrogram
-function generateFrame() {
-    const amp = new Float32Array(MAX_SUBCARRIERS);
-    const phase = new Float32Array(MAX_SUBCARRIERS);
-    
-    const noiseLevel = 0.05; // 5% noise
-    for (let i = 0; i < MAX_SUBCARRIERS; i++) {
-        amp[i] = Math.max(0, baseCSI_Amp[i] * (1.0 + (Math.random() * 2 - 1) * noiseLevel));
-        phase[i] = baseCSI_Phase[i] + (Math.random() * 0.2 - 0.1);
-    }
-    
-    // RSSI with +-1 dBm wobble
-    const rssi = baseRSSI + (Math.random() * 2 - 1);
-    
-    ampHistory.shift();
-    ampHistory.push(amp);
-    
-    rssiHistory.shift();
-    rssiHistory.push(rssi);
-    
-    frameCount.value++;
-    return { amp, phase, rssi };
+// Backward compat
+export function updateBaseData(csiData, rssiData) {
+    pushRealFrame(csiData, rssiData);
 }
 
-let lastTime = 0;
-function renderLoop(time) {
-    if (!active) return;
+function redrawAll(st, currentRssi) {
+    if (!ctxAmp) return;
+    const lastAmp = st.ampHistory[st.ampHistory.length - 1];
+    const lastPhase = st.phaseHistory[st.phaseHistory.length - 1];
+    const lastCV = st.activityHistory[st.activityHistory.length - 1];
     
-    const dt = time - lastTime;
-    if (dt > 30) { // ~30 fps max
-        lastTime = time;
-        const data = generateFrame();
-        
-        drawAmp(ctxAmp, data.amp);
-        drawPhase(ctxPhase, data.phase);
-        drawSpectro(ctxSpectro);
-        drawRssi(ctxRssi, data.rssi);
-        
-        document.getElementById('csi-status').textContent = 
-            `Frames: ${frameCount.value} | Subcarriers: ${MAX_SUBCARRIERS} | RSSI: ${data.rssi.toFixed(1)} dBm | Live Simulation`;
+    drawAmp(ctxAmp, lastAmp, st);
+    drawPhase(ctxPhase, lastPhase);
+    drawSpectro(ctxSpectro, st);
+    drawActivity(ctxActivity, st);
+    drawRssi(ctxRssi, st, currentRssi);
+    
+    const statusEl = document.getElementById('csi-status');
+    if (statusEl) {
+        statusEl.textContent = `Frames: ${st.frameCount} | Subcarriers: ${MAX_SUBCARRIERS} | ` +
+            `RSSI: ${currentRssi.toFixed(1)} dBm | CV: ${lastCV.toFixed(3)} | Real Sionna Data`;
     }
-    
-    animationId = requestAnimationFrame(renderLoop);
 }
 
-// --- Renderers ---
+// --- Phase unwrap ---
+function unwrapPhase(phases) {
+    const out = new Float32Array(phases.length);
+    out[0] = phases[0];
+    for (let i = 1; i < phases.length; i++) {
+        let diff = phases[i] - phases[i - 1];
+        while (diff > Math.PI) diff -= 2 * Math.PI;
+        while (diff < -Math.PI) diff += 2 * Math.PI;
+        out[i] = out[i - 1] + diff;
+    }
+    return out;
+}
 
-function drawAmp(ctx, amp) {
+// ==========================================================================
+// Panel Renderers
+// ==========================================================================
+
+function drawAmp(ctx, amp, st) {
     const canvas = ctx.canvas;
     const w = canvas.width = canvas.clientWidth;
     const h = canvas.height = canvas.clientHeight;
-    
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = "#00d4ff";
     
-    const maxVal = Math.max(10, Math.max(...amp) * 1.2);
-    const bw = w / MAX_SUBCARRIERS;
+    const n = Math.min(MAX_SUBCARRIERS, amp.length);
+    const maxVal = Math.max(1e-6, ...amp) * 1.2;
+    const bw = w / n;
     
-    for (let i = 0; i < MAX_SUBCARRIERS; i++) {
+    // Draw baseline reference if available
+    if (st.hasBaseline && st.baselineAmp) {
+        ctx.fillStyle = 'rgba(255, 180, 0, 0.25)';
+        for (let i = 0; i < n; i++) {
+            const hBar = (st.baselineAmp[i] / maxVal) * h;
+            ctx.fillRect(i * bw, h - hBar, bw > 1 ? bw - 1 : bw, hBar);
+        }
+    }
+    
+    // Draw current frame
+    ctx.fillStyle = '#00d4ff';
+    for (let i = 0; i < n; i++) {
         const hBar = (amp[i] / maxVal) * h;
         ctx.fillRect(i * bw, h - hBar, bw > 1 ? bw - 1 : bw, hBar);
     }
     
-    // Title
-    ctx.fillStyle = "#e0e0e0";
-    ctx.font = "12px Inter";
-    ctx.fillText("Subcarrier Amplitude", 5, 12);
+    ctx.fillStyle = '#e0e0e0';
+    ctx.font = '12px Inter, sans-serif';
+    ctx.fillText('Subcarrier Amplitude (linear)', 5, 12);
+    if (st.hasBaseline) {
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillText('■ Baseline', w - 80, 12);
+    }
 }
 
 function drawPhase(ctx, phase) {
     const canvas = ctx.canvas;
     const w = canvas.width = canvas.clientWidth;
     const h = canvas.height = canvas.clientHeight;
-    
     ctx.clearRect(0, 0, w, h);
-    ctx.strokeStyle = "#ff6b6b";
-    ctx.lineWidth = 1.5;
     
+    const n = Math.min(MAX_SUBCARRIERS, phase.length);
+    const bw = w / n;
+    
+    let minP = Infinity, maxP = -Infinity;
+    for (let i = 0; i < n; i++) {
+        if (phase[i] < minP) minP = phase[i];
+        if (phase[i] > maxP) maxP = phase[i];
+    }
+    const range = (maxP - minP) || 1;
+    
+    ctx.strokeStyle = '#ff6b6b';
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    const bw = w / MAX_SUBCARRIERS;
-    for (let i = 0; i < MAX_SUBCARRIERS; i++) {
-        const px = i * bw + bw/2;
-        // Map -PI .. PI to h .. 0
-        const py = h - ((phase[i] + Math.PI) / (2 * Math.PI)) * h;
+    for (let i = 0; i < n; i++) {
+        const px = i * bw + bw / 2;
+        const py = h - ((phase[i] - minP) / range) * (h - 20) - 10;
         if (i === 0) ctx.moveTo(px, py);
         else ctx.lineTo(px, py);
     }
     ctx.stroke();
     
-    ctx.fillStyle = "#e0e0e0";
-    ctx.font = "12px Inter";
-    ctx.fillText("Subcarrier Phase (rad)", 5, 12);
+    ctx.fillStyle = '#e0e0e0';
+    ctx.font = '12px Inter, sans-serif';
+    ctx.fillText('Phase (unwrapped, rad)', 5, 12);
 }
 
-function drawSpectro(ctx) {
+function drawSpectro(ctx, st) {
     const canvas = ctx.canvas;
     const w = canvas.width = canvas.clientWidth;
     const h = canvas.height = canvas.clientHeight;
     
-    // Find absolute max in history for normalization
-    let maxVal = 0.01;
-    for (let row of ampHistory) {
-        for (let val of row) if (val > maxVal) maxVal = val;
+    // Update the running max (only grows → stable colors)
+    for (const row of st.ampHistory) {
+        for (let i = 0; i < row.length; i++) {
+            if (row[i] > st.spectroMaxVal) st.spectroMaxVal = row[i];
+        }
     }
+    const maxVal = st.spectroMaxVal;
     
     const imgData = ctx.createImageData(w, h);
     const data = imgData.data;
-    
     const cols = MAX_SUBCARRIERS;
     const rows = HISTORY_LEN;
     
-    const cellW = w / cols;
-    const cellH = h / rows;
-    
-    // Paint pixels
     for (let y = 0; y < h; y++) {
-        // Map y to history row (0 is newest at bottom, so h is old)
-        const rowIdx = rows - 1 - Math.min(rows - 1, Math.floor((y / h) * rows));
-        const rowData = ampHistory[rowIdx];
+        const rowIdx = Math.min(rows - 1, Math.floor((y / h) * rows));
+        const rowData = st.ampHistory[rowIdx];
         
         for (let x = 0; x < w; x++) {
             const colIdx = Math.min(cols - 1, Math.floor((x / w) * cols));
-            const val = rowData[colIdx] / maxVal; // 0..1
-            
-            // Jet colormap inline
-            const t = Math.max(0, Math.min(1, val));
-            const r = Math.max(0, Math.min(255, Math.round(255 * (1.5 - Math.abs(1 - 4 * (t - 0.75))))));
-            const g = Math.max(0, Math.min(255, Math.round(255 * (1.5 - Math.abs(1 - 4 * (t - 0.5))))));
-            const b = Math.max(0, Math.min(255, Math.round(255 * (1.5 - Math.abs(1 - 4 * (t - 0.25))))));
+            const val = rowData[colIdx] / maxVal;
+            const c = infernoColor(val);
             
             const idx = (y * w + x) * 4;
-            data[idx] = r;
-            data[idx+1] = g;
-            data[idx+2] = b;
-            data[idx+3] = 255;
+            data[idx] = c.r;
+            data[idx + 1] = c.g;
+            data[idx + 2] = c.b;
+            data[idx + 3] = 255;
         }
     }
     
     ctx.putImageData(imgData, 0, 0);
     
-    ctx.fillStyle = "#e0e0e0";
-    ctx.font = "12px Inter";
-    ctx.fillText("Amplitude Spectrogram", 5, 12);
+    ctx.fillStyle = '#e0e0e0';
+    ctx.font = '12px Inter, sans-serif';
+    ctx.fillText('Amplitude Spectrogram (time ↓ × subcarrier →)', 5, 12);
 }
 
-function drawRssi(ctx, currentVal) {
+function drawActivity(ctx, st) {
+    if (!ctx) return;
     const canvas = ctx.canvas;
     const w = canvas.width = canvas.clientWidth;
     const h = canvas.height = canvas.clientHeight;
-    
     ctx.clearRect(0, 0, w, h);
-    ctx.strokeStyle = "#38bdf8";
-    ctx.lineWidth = 1.5;
     
+    const history = st.activityHistory;
+    const n = history.length;
+    if (n < 2) return;
+    
+    let maxCV = 0.1;
+    for (let i = 0; i < n; i++) {
+        if (history[i] > maxCV) maxCV = history[i];
+    }
+    maxCV *= 1.2;
+    
+    const bw = w / n;
+    const meanCV = history.reduce((a, b) => a + b, 0) / n;
+    
+    // Fill area
+    ctx.fillStyle = 'rgba(74, 222, 128, 0.25)';
     ctx.beginPath();
-    const bw = w / HISTORY_LEN;
-    for (let i = 0; i < HISTORY_LEN; i++) {
-        const val = rssiHistory[i];
+    ctx.moveTo(0, h);
+    for (let i = 0; i < n; i++) {
         const px = i * bw;
-        // Map -90..-30 to h..0
-        let py = h - ((val - (-90)) / 60) * h;
-        py = Math.max(0, Math.min(h, py));
+        const py = h - (history[i] / maxCV) * (h - 20) - 5;
+        ctx.lineTo(px, py);
+    }
+    ctx.lineTo((n - 1) * bw, h);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Line
+    ctx.strokeStyle = '#4ade80';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+        const px = i * bw;
+        const py = h - (history[i] / maxCV) * (h - 20) - 5;
         if (i === 0) ctx.moveTo(px, py);
         else ctx.lineTo(px, py);
     }
     ctx.stroke();
     
-    ctx.fillStyle = "#e0e0e0";
-    ctx.font = "12px Inter";
+    // Mean dashed line
+    const meanY = h - (meanCV / maxCV) * (h - 20) - 5;
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 0.8;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(0, meanY);
+    ctx.lineTo(w, meanY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    
+    ctx.fillStyle = '#e0e0e0';
+    ctx.font = '12px Inter, sans-serif';
+    ctx.fillText(`Activity (CV = std/mean): ${history[n - 1].toFixed(3)}`, 5, 12);
+}
+
+function drawRssi(ctx, st, currentVal) {
+    const canvas = ctx.canvas;
+    const w = canvas.width = canvas.clientWidth;
+    const h = canvas.height = canvas.clientHeight;
+    ctx.clearRect(0, 0, w, h);
+    
+    const history = st.rssiHistory;
+    const n = history.length;
+    const bw = w / n;
+    
+    let rMin = Infinity, rMax = -Infinity;
+    for (let i = 0; i < n; i++) {
+        if (history[i] < rMin) rMin = history[i];
+        if (history[i] > rMax) rMax = history[i];
+    }
+    const margin = Math.max((rMax - rMin) * 0.2, 2);
+    rMin -= margin;
+    rMax += margin;
+    const range = rMax - rMin || 1;
+    
+    // Fill area
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.15)';
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    for (let i = 0; i < n; i++) {
+        const px = i * bw;
+        const py = h - ((history[i] - rMin) / range) * (h - 10);
+        ctx.lineTo(px, py);
+    }
+    ctx.lineTo((n - 1) * bw, h);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Line
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+        const px = i * bw;
+        const py = h - ((history[i] - rMin) / range) * (h - 10);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    
+    // Mean dashed line
+    const meanRSSI = history.reduce((a, b) => a + b, 0) / n;
+    const meanY = h - ((meanRSSI - rMin) / range) * (h - 10);
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 0.8;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(0, meanY);
+    ctx.lineTo(w, meanY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    
+    ctx.fillStyle = '#e0e0e0';
+    ctx.font = '12px Inter, sans-serif';
     ctx.fillText(`RSSI (dBm): ${currentVal.toFixed(1)}`, 5, 12);
 }

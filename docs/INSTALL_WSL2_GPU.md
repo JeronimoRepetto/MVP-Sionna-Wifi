@@ -330,7 +330,8 @@ This ensures the backend always starts, regardless of GPU availability.
 ## 10. SMPL Human Integration (Optional)
 
 If you want to visualize how the human body (blockage/diffraction) affects the WiFi signal, you need to install the **SMPL** neural network models.
-*Due to Max Planck Institute (MPI-IS) licensing restrictions, these mathematical files (.pkl) are not included in the repository.*
+
+> **⚠️ Due to Max Planck Institute (MPI-IS) licensing restrictions, the SMPL model files (`.pkl`) are NOT included in this repository and MUST NOT be committed to Git.** They are listed in `.gitignore`.
 
 ### Step 1: Python Dependencies
 Make sure you are in WSL2 and have the conda environment activated (`conda activate sionna`).
@@ -346,21 +347,35 @@ pip install --no-build-isolation chumpy
 1. Go to the official SMPL website: [https://smpl.is.tue.mpg.de/](https://smpl.is.tue.mpg.de/)
 2. Register (create an account) and log in.
 3. Go to **Downloads**.
-4. Download the basic model (usually a ZIP file containing `.pkl` files).
+4. Download **SMPL for Python** (v1.1.0 recommended). This gives you a ZIP containing `.pkl` files.
 5. Extract the ZIP file.
 
-### Step 3: Place and Rename Files
+### Step 3: Place Files
 At the root of this project, create the following directory structure:
 ```bash
 mkdir -p backend/models/smpl
 ```
 
-Copy the two extracted files (`basicmodel_m_lbs_10_207_0_v1.0.0.pkl` and `basicModel_f_lbs_10_207_0_v1.0.0.pkl`) into that folder.
+Copy the extracted `.pkl` files into that folder. You need at minimum:
+- `basicmodel_m_lbs_10_207_0_v1.1.0.pkl` (male)
+- `basicmodel_neutral_lbs_10_207_0_v1.1.0.pkl` (neutral)
 
-**IMPORTANT**: The `smplx` library (used in the backend) expects a neutral file if no gender is specified. You must rename one of them or use the neutral version if provided. The easiest way is to rename the female or male average file like this:
+The `smplx` library (used in `smpl_manager.py`) calls `smplx.create(gender='neutral')`, which automatically finds the neutral model by its standard filename convention.
+
+### Step 4: Verify
+
+Restart the FastAPI server and check the logs:
 ```bash
-cd backend/models/smpl
-cp basicModel_f_lbs_10_207_0_v1.0.0.pkl SMPL_NEUTRAL.pkl
+cd /mnt/c/Users/<YOUR_USERNAME>/Desktop/MVP-Sionna-Wifi/backend
+python main.py
 ```
 
-Upon restarting the FastAPI server and running a simulation, the web interface will allow you to insert or animate humans.
+You should see:
+```
+✅ SMPL model loaded successfully on cuda  (or cpu)
+```
+
+If files are missing, you'll see:
+```
+🚨 Missing SMPL models. You must create 'backend/models/smpl' and place the .pkl files there.
+```

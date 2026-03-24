@@ -55,6 +55,9 @@ This project creates a **100% virtual** simulation environment:
 
 ## SMPL Human Body Integration
 
+> [!IMPORTANT]
+> **The SMPL model files (`.pkl`) are NOT included in this repository** due to [Max Planck Institute (MPI-IS) licensing restrictions](https://smpl.is.tue.mpg.de/). You must download them separately and place them in `backend/models/smpl/`. See the [SMPL setup guide](docs/INSTALL_WSL2_GPU.md#10-smpl-human-integration-optional) for step-by-step instructions.
+
 The simulation includes a realistic **SMPL human body model** (6,890 vertices) injected as an RF obstacle into the Sionna RT scene. The human body is modeled with `itu_wet_ground` dielectric properties (high permittivity ≈ water), closely approximating the electromagnetic behavior of living tissue at 2.4 GHz.
 
 ![SMPL model inside the simulation room](docs/images/smpl_preview.png)
@@ -62,7 +65,17 @@ The simulation includes a realistic **SMPL human body model** (6,890 vertices) i
 When the **Human Obstacle** toggle is enabled, the SMPL mesh is dynamically injected into the Mitsuba scene XML and the ray tracing engine recalculates all propagation paths — including absorption, reflection, and diffraction around the human body.
 
 ![Ray tracing with SMPL obstacle active](docs/images/smpl_rays.png)
-![Heatmap coverage changes with human present](docs/images/smpl_heatmap.png)
+
+### Walking Animation
+
+The **Play Walk** animation system moves the human model across the room while running a Sionna RT simulation per frame. This lets you observe how human movement affects WiFi signal propagation, ESP32 readings, and heatmap coverage in real-time. Controls include:
+
+- **Play/Pause** button to start/stop the walk animation
+- **Speed** slider (0.5x–2.0x)
+- **Frames** slider (8–32 frames per walk cycle)
+- **Frame counter** showing current progress
+
+![animation](docs/images/preview_animation.gif)
 
 ## Architecture
 
@@ -76,15 +89,16 @@ Blender Script ──XML──► Mitsuba 3 ──► Sionna RT ──► FastAP
 ```
 MVP-Sionna-Wifi/
 ├── blender/
-│   ├── generate_room.py      # Procedural room generation (run in Blender)
-│   └── export_scene.py       # Export to Mitsuba XML
+│   └── generate_room.py      # Procedural room generation (run in Blender)
 ├── scenes/                   # Exported XML scenes
 ├── backend/
 │   ├── config.py             # Physical parameters & sensor positions
 │   ├── scene_loader.py       # Load XML into Sionna RT
 │   ├── simulation.py         # Ray tracing engine (SBR)
 │   ├── smpl_manager.py       # SMPL human model generation (smplx + trimesh)
+│   ├── pose_library.py       # Walking keyframes & animation sequence generation
 │   ├── main.py               # FastAPI server
+│   ├── models/smpl/          # ⚠️ SMPL .pkl files (gitignored — see setup guide)
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
@@ -94,18 +108,23 @@ MVP-Sionna-Wifi/
 │   │   ├── sensors.js        # Tx/Rx markers
 │   │   ├── human.js          # SMPL human model loader & positioning
 │   │   ├── heatmap.js        # Coverage overlay
+│   │   ├── csi_panel.js      # CSI amplitude/phase charts
 │   │   ├── controls.js       # UI panel
 │   │   └── websocket.js      # WS client
 │   ├── index.html
 │   ├── style.css
 │   └── package.json
+├── tests/
+│   ├── test_config.py        # Config validation tests
+│   ├── test_scene_loader.py  # Scene loader tests
+│   ├── test_simulation.py    # Simulation engine tests
+│   ├── test_pose_library.py  # Pose library tests
+│   ├── test_animation.py     # Animation integration tests
+│   ├── test_api.py           # API endpoint tests
+│   └── run_all.py            # Test runner
 ├── docs/
 │   ├── HOW_IT_WORKS.md       # Technical deep-dive
 │   └── INSTALL_WSL2_GPU.md   # GPU setup guide (WSL2 + OptiX)
-├── internDocs/               # Internal documentation (not pushed)
-│   ├── BLENDER_ROOM_GUIDE.md # How to create custom rooms
-│   ├── FRONT_EXP.md          # Frontend architecture
-│   └── BACK_EXP.md           # Backend architecture
 └── README.md
 ```
 
@@ -144,19 +163,34 @@ MVP-Sionna-Wifi/
 
 ### Python Dependencies
 
+**Core (always required):**
+
 ```
-sionna-rt
-mitsuba>=3.0
-tensorflow[and-cuda]
-numpy
-fastapi
-uvicorn
-websockets
-smplx
-torch
-trimesh
-chumpy  # Install with: pip install --no-build-isolation chumpy
+numpy>=1.24
+fastapi>=0.100
+uvicorn[standard]>=0.22
+websockets>=11.0
 ```
+
+**Simulation engine (for real ray tracing):**
+
+```
+sionna              # Sionna RT ray tracing library
+tensorflow[and-cuda] # TensorFlow with CUDA support
+mitsuba             # Mitsuba 3 renderer (installed as sionna dependency)
+```
+
+**SMPL human model (optional — for human obstacle feature):**
+
+```
+smplx               # SMPL/SMPL-X body model library
+torch               # PyTorch (required by smplx)
+trimesh             # 3D mesh processing
+```
+
+> [!NOTE]
+> Without the simulation engine packages, the backend runs in **mock mode** with synthetic data.
+> Without the SMPL packages, the human obstacle feature is disabled but everything else works.
 
 ## Setup & Installation (Windows / WSL2)
 
@@ -188,7 +222,7 @@ conda activate sionna
 ```bash
 cd /mnt/c/Users/<YOUR_USERNAME>/Desktop/MVP-Sionna-Wifi/backend
 pip install -r requirements.txt
-pip install sionna-rt tensorflow[and-cuda]
+pip install sionna tensorflow[and-cuda]
 ```
 
 **4. (Optional) Enable GPU OptiX** — see [GPU Setup Guide](docs/INSTALL_WSL2_GPU.md)
@@ -224,8 +258,8 @@ Open `http://localhost:5173` in your browser.
 | Version  | Description                               |
 | :------: | ----------------------------------------- |
 |   v0.1   | Room + Sionna RT + Visualization          |
-| **v0.2** | ← Current: SMPL body model as obstacle    |
-|   v0.3   | Animated human movement + dynamic CSI     |
+|   v0.2   | SMPL body model as obstacle               |
+| **v0.3** | ← Current: Animated human movement + CSI  |
 |   v0.4   | Compare simulated vs real CSI (ESP32)     |
 |   v0.5   | Full pose estimation pipeline integration |
 

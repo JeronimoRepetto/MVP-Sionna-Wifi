@@ -25,6 +25,7 @@ checkpoints/
 # Node
 node_modules/
 frontend/dist/
+.vite/
 
 # IDE
 .vscode/
@@ -52,3 +53,6 @@ output/
 # Temp
 .tmp_clone/
 *.deb
+
+# SMPL Models
+backend/models/smpl/
